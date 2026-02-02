@@ -65,7 +65,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/yangguofeng/GoNavi.git
+git clone https://github.com/Syngnat/GoNavi.git
 cd GoNavi
 
 # 启动开发服务器 (支持热重载)
@@ -90,6 +90,22 @@ wails build -clean
 支持构建：
 *   macOS (AMD64 / ARM64)
 *   Windows (AMD64)
+
+---
+
+## ❓ 常见问题 (Troubleshooting)
+
+### macOS 提示 "应用已损坏，无法打开"
+
+由于本项目尚未购买 Apple 开发者证书进行签名（Notarization），macOS 的 Gatekeeper 安全机制可能会拦截应用的运行。请按照以下步骤解决：
+
+1.  将下载的 `GoNavi.app` 拖入 **应用程序** 文件夹。
+2.  打开 **终端 (Terminal)**。
+3.  复制并执行以下命令（输入密码时不会显示）：
+    ```bash
+    sudo xattr -rd com.apple.quarantine /Applications/GoNavi.app
+    ```
+4.  或者：在 Finder 中右键点击应用图标，按住 `Control` 键选择 **打开**，然后在弹出的窗口中再次点击 **打开**。
 
 ---
 

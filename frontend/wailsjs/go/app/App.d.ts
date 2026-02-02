@@ -30,6 +30,8 @@ export function ExportData(arg1:Array<Record<string, any>>,arg2:Array<string>,ar
 
 export function ExportTable(arg1:connection.ConnectionConfig,arg2:string,arg3:string,arg4:string):Promise<connection.QueryResult>;
 
+export function ImportConfigFile():Promise<connection.QueryResult>;
+
 export function ImportData(arg1:connection.ConnectionConfig,arg2:string,arg3:string):Promise<connection.QueryResult>;
 
 export function MySQLConnect(arg1:connection.ConnectionConfig):Promise<connection.QueryResult>;
@@ -43,3 +45,5 @@ export function MySQLQuery(arg1:connection.ConnectionConfig,arg2:string,arg3:str
 export function MySQLShowCreateTable(arg1:connection.ConnectionConfig,arg2:string,arg3:string):Promise<connection.QueryResult>;
 
 export function OpenSQLFile():Promise<connection.QueryResult>;
+
+export function TestConnection(arg1:connection.ConnectionConfig):Promise<connection.QueryResult>;

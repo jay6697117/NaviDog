@@ -28,7 +28,27 @@ func (a *App) DBConnect(config connection.ConnectionConfig) connection.QueryResu
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 	
-	return connection.QueryResult{Success: true, Message: "Connected successfully"}
+	return connection.QueryResult{Success: true, Message: "连接成功"}
+}
+
+func (a *App) TestConnection(config connection.ConnectionConfig) connection.QueryResult {
+	// Force close existing cached connection if any to ensure fresh test
+	key := getCacheKey(config)
+	func() {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if oldDB, ok := a.dbCache[key]; ok {
+			oldDB.Close()
+			delete(a.dbCache, key)
+		}
+	}()
+
+	_, err := a.getDatabase(config)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	
+	return connection.QueryResult{Success: true, Message: "连接成功"}
 }
 
 func (a *App) CreateDatabase(config connection.ConnectionConfig, dbName string) connection.QueryResult {

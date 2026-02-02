@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Button, message, Checkbox, Divider, Collapse, Select } from 'antd';
+import { Modal, Form, Input, InputNumber, Button, message, Checkbox, Divider, Collapse, Select, Alert } from 'antd';
 import { useStore } from '../store';
-import { MySQLConnect } from '../../wailsjs/go/app/App';
+import { MySQLConnect, MySQLGetDatabases } from '../../wailsjs/go/app/App';
 import { SavedConnection } from '../types';
 
 const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialValues?: SavedConnection | null }> = ({ open, onClose, initialValues }) => {
@@ -9,11 +9,15 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
   const [loading, setLoading] = useState(false);
   const [useSSH, setUseSSH] = useState(false);
   const [dbType, setDbType] = useState('mysql');
+  const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [dbList, setDbList] = useState<string[]>([]);
   const addConnection = useStore((state) => state.addConnection);
   const updateConnection = useStore((state) => state.updateConnection);
 
   useEffect(() => {
       if (open) {
+          setTestResult(null); // Reset test result
+          setDbList([]);
           if (initialValues) {
               form.setFieldsValue({
                   type: initialValues.config.type,
@@ -23,6 +27,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
                   user: initialValues.config.user,
                   password: initialValues.config.password,
                   database: initialValues.config.database,
+                  includeDatabases: initialValues.includeDatabases,
                   useSSH: initialValues.config.useSSH,
                   sshHost: initialValues.config.ssh?.host,
                   sshPort: initialValues.config.ssh?.port,
@@ -45,25 +50,9 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
       const values = await form.validateFields();
       setLoading(true);
       
-      const sshConfig = values.useSSH ? {
-          host: values.sshHost,
-          port: Number(values.sshPort),
-          user: values.sshUser,
-          password: values.sshPassword || "",
-          keyPath: values.sshKeyPath || ""
-      } : { host: "", port: 22, user: "", password: "", keyPath: "" };
-
-      const config = { 
-          type: values.type,
-          host: values.host,
-          port: Number(values.port || 0),
-          user: values.user || "",
-          password: values.password || "",
-          database: values.database || "",
-          useSSH: !!values.useSSH,
-          ssh: sshConfig
-      };
+      const config = await buildConfig(values);
       
+      // Use Connect to verify before saving
       const res = await MySQLConnect(config as any);
       setLoading(false);
       
@@ -71,7 +60,8 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         const newConn = {
           id: initialValues ? initialValues.id : Date.now().toString(),
           name: values.name || (values.type === 'sqlite' ? 'SQLite DB' : values.host),
-          config: config
+          config: config,
+          includeDatabases: values.includeDatabases
         };
 
         if (initialValues) {
@@ -94,6 +84,51 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
     }
   };
 
+  const handleTest = async () => {
+      try {
+          const values = await form.validateFields();
+          setLoading(true);
+          setTestResult(null); // Clear previous result
+          const config = await buildConfig(values);
+          const res = await (window as any).go.app.App.TestConnection(config);
+          setLoading(false);
+          if (res.success) {
+              setTestResult({ type: 'success', message: res.message });
+              // Fetch DB List on success
+              const dbRes = await MySQLGetDatabases(config as any);
+              if (dbRes.success) {
+                  const dbs = (dbRes.data as any[]).map((row: any) => row.Database || row.database);
+                  setDbList(dbs);
+              }
+          } else {
+              setTestResult({ type: 'error', message: "测试失败: " + res.message });
+          }
+      } catch (e) {
+          setLoading(false);
+      }
+  };
+
+  const buildConfig = async (values: any) => {
+      const sshConfig = values.useSSH ? {
+          host: values.sshHost,
+          port: Number(values.sshPort),
+          user: values.sshUser,
+          password: values.sshPassword || "",
+          keyPath: values.sshKeyPath || ""
+      } : { host: "", port: 22, user: "", password: "", keyPath: "" };
+
+      return { 
+          type: values.type,
+          host: values.host,
+          port: Number(values.port || 0),
+          user: values.user || "",
+          password: values.password || "",
+          database: values.database || "",
+          useSSH: !!values.useSSH,
+          ssh: sshConfig
+      };
+  };
+
   const isSqlite = dbType === 'sqlite';
 
   return (
@@ -103,8 +138,11 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         onCancel={onClose} 
         onOk={handleOk} 
         confirmLoading={loading} 
-        okText="确定" 
-        cancelText="取消" 
+        footer={[
+            <Button key="test" loading={loading} onClick={handleTest}>测试连接</Button>,
+            <Button key="cancel" onClick={onClose}>取消</Button>,
+            <Button key="submit" type="primary" loading={loading} onClick={handleOk}>保存</Button>
+        ]}
         width={600}
         zIndex={10001} // Increase z-index
         destroyOnHidden // Reset on close
@@ -115,6 +153,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         layout="vertical" 
         initialValues={{ type: 'mysql', host: 'localhost', port: 3306, user: 'root', useSSH: false, sshPort: 22 }}
         onValuesChange={(changed) => {
+            if (testResult) setTestResult(null); // Clear result on change
             if (changed.useSSH !== undefined) setUseSSH(changed.useSSH);
             if (changed.type !== undefined) setDbType(changed.type);
         }}
@@ -155,8 +194,10 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         )}
         
         {!isSqlite && (
-        <Form.Item name="database" label="默认数据库 (可选)">
-            <Input />
+        <Form.Item name="includeDatabases" label="显示数据库 (留空显示全部)" help="连接测试成功后可选择">
+            <Select mode="multiple" placeholder="选择显示的数据库" allowClear>
+                {dbList.map(db => <Select.Option key={db} value={db}>{db}</Select.Option>)}
+            </Select>
         </Form.Item>
         )}
 
@@ -193,6 +234,15 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         </>
         )}
       </Form>
+      
+      {testResult && (
+          <Alert
+              message={testResult.message}
+              type={testResult.type}
+              showIcon
+              style={{ marginTop: 16 }}
+          />
+      )}
     </Modal>
   );
 };
