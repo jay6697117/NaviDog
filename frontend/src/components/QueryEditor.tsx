@@ -34,7 +34,7 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
   const tablesRef = useRef<string[]>([]); // Store tables for autocomplete
   const allColumnsRef = useRef<{tableName: string, name: string, type: string}[]>([]); // Store all columns
 
-  const connections = useStore(state => state.connections);
+  const { connections, addSqlLog } = useStore();
   const saveQuery = useStore(state => state.saveQuery);
   const darkMode = useStore(state => state.darkMode);
   const sqlFormatOptions = useStore(state => state.sqlFormatOptions);
@@ -250,27 +250,53 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
     setTargetTableName(simpleTableName);
     setPkColumns(primaryKeys);
 
-    const res = await MySQLQuery(config as any, currentDb, query);
+    const startTime = Date.now();
+    try {
+        const res = await MySQLQuery(config as any, currentDb, query);
+        const duration = Date.now() - startTime;
+        
+        addSqlLog({
+            id: `log-${Date.now()}-query`,
+            timestamp: Date.now(),
+            sql: query,
+            status: res.success ? 'success' : 'error',
+            duration,
+            message: res.success ? '' : res.message,
+            affectedRows: (res.success && !Array.isArray(res.data)) ? (res.data as any).affectedRows : (Array.isArray(res.data) ? res.data.length : undefined),
+            dbName: currentDb
+        });
 
-    if (res.success) {
-      if (Array.isArray(res.data)) {
-        if (res.data.length > 0) {
-            const cols = Object.keys(res.data[0]);
-            setColumnNames(cols);
-            setResults(res.data.map((row: any, i: number) => ({ ...row, key: i })));
+        if (res.success) {
+          if (Array.isArray(res.data)) {
+            if (res.data.length > 0) {
+                const cols = Object.keys(res.data[0]);
+                setColumnNames(cols);
+                setResults(res.data.map((row: any, i: number) => ({ ...row, key: i })));
+            } else {
+                message.info('查询执行成功，但没有返回结果。');
+                setResults([]);
+                setColumnNames([]);
+            }
+          } else {
+              const affected = (res.data as any).affectedRows;
+              message.success(`受影响行数: ${affected}`);
+              setResults([]);
+              setColumnNames([]);
+          }
         } else {
-            message.info('查询执行成功，但没有返回结果。');
-            setResults([]);
-            setColumnNames([]);
+          message.error(res.message);
         }
-      } else {
-          const affected = (res.data as any).affectedRows;
-          message.success(`受影响行数: ${affected}`);
-          setResults([]);
-          setColumnNames([]);
-      }
-    } else {
-      message.error(res.message);
+    } catch (e: any) {
+        message.error("Error executing query: " + e.message);
+        addSqlLog({
+            id: `log-${Date.now()}-error`,
+            timestamp: Date.now(),
+            sql: query,
+            status: 'error',
+            duration: Date.now() - startTime,
+            message: e.message,
+            dbName: currentDb
+        });
     }
     setLoading(false);
   };

@@ -2,6 +2,17 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { SavedConnection, TabData, SavedQuery } from './types';
 
+export interface SqlLog {
+  id: string;
+  timestamp: number;
+  sql: string;
+  status: 'success' | 'error';
+  duration: number;
+  message?: string;
+  dbName?: string;
+  affectedRows?: number;
+}
+
 interface AppState {
   connections: SavedConnection[];
   tabs: TabData[];
@@ -10,8 +21,10 @@ interface AppState {
   savedQueries: SavedQuery[];
   darkMode: boolean;
   sqlFormatOptions: { keywordCase: 'upper' | 'lower' };
+  sqlLogs: SqlLog[];
   
   addConnection: (conn: SavedConnection) => void;
+  updateConnection: (conn: SavedConnection) => void;
   removeConnection: (id: string) => void;
   
   addTab: (tab: TabData) => void;
@@ -24,6 +37,9 @@ interface AppState {
 
   toggleDarkMode: () => void;
   setSqlFormatOptions: (options: { keywordCase: 'upper' | 'lower' }) => void;
+  
+  addSqlLog: (log: SqlLog) => void;
+  clearSqlLogs: () => void;
 }
 
 export const useStore = create<AppState>()(
@@ -36,8 +52,12 @@ export const useStore = create<AppState>()(
       savedQueries: [],
       darkMode: false,
       sqlFormatOptions: { keywordCase: 'upper' },
+      sqlLogs: [],
 
       addConnection: (conn) => set((state) => ({ connections: [...state.connections, conn] })),
+      updateConnection: (conn) => set((state) => ({ 
+          connections: state.connections.map(c => c.id === conn.id ? conn : c) 
+      })),
       removeConnection: (id) => set((state) => ({ connections: state.connections.filter(c => c.id !== id) })),
 
       addTab: (tab) => set((state) => {
@@ -76,10 +96,13 @@ export const useStore = create<AppState>()(
 
       toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
       setSqlFormatOptions: (options) => set({ sqlFormatOptions: options }),
+      
+      addSqlLog: (log) => set((state) => ({ sqlLogs: [log, ...state.sqlLogs].slice(0, 1000) })), // Keep last 1000 logs
+      clearSqlLogs: () => set({ sqlLogs: [] }),
     }),
     {
       name: 'lite-db-storage', // name of the item in the storage (must be unique)
-      partialize: (state) => ({ connections: state.connections, savedQueries: state.savedQueries, darkMode: state.darkMode, sqlFormatOptions: state.sqlFormatOptions }), // Persist darkMode too
+      partialize: (state) => ({ connections: state.connections, savedQueries: state.savedQueries, darkMode: state.darkMode, sqlFormatOptions: state.sqlFormatOptions }), // Don't persist logs
     }
   )
 );

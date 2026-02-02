@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Tree, message, Dropdown, MenuProps, Input, Button, Modal, Form } from 'antd';
+import { Tree, message, Dropdown, MenuProps, Input, Button, Modal, Form, Badge } from 'antd';
 import { 
   DatabaseOutlined, 
   TableOutlined, 
@@ -20,7 +20,9 @@ import {
   LinkOutlined,
   FileAddOutlined,
   PlusOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  DeleteOutlined,
+  DisconnectOutlined
 } from '@ant-design/icons';
 import { useStore } from '../store';
 import { SavedConnection } from '../types';
@@ -38,13 +40,16 @@ interface TreeNode {
   type?: 'connection' | 'database' | 'table' | 'queries-folder' | 'saved-query' | 'folder-columns' | 'folder-indexes' | 'folder-fks' | 'folder-triggers';
 }
 
-const Sidebar: React.FC = () => {
-  const { connections, savedQueries, addTab, setActiveContext } = useStore();
+const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> = ({ onEditConnection }) => {
+  const { connections, savedQueries, addTab, setActiveContext, removeConnection } = useStore();
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [searchValue, setSearchValue] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
   
+  // Connection Status State: key -> 'success' | 'error'
+  const [connectionStates, setConnectionStates] = useState<Record<string, 'success' | 'error'>>({});
+
   // Create Database Modal
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
   const [createDbForm] = Form.useForm();
@@ -106,6 +111,7 @@ const Sidebar: React.FC = () => {
       };
       const res = await MySQLGetDatabases(config as any);
       if (res.success) {
+        setConnectionStates(prev => ({ ...prev, [conn.id]: 'success' }));
         const dbs = (res.data as any[]).map((row: any) => ({
           title: row.Database || row.database,
           key: `${conn.id}-${row.Database || row.database}`,
@@ -116,6 +122,7 @@ const Sidebar: React.FC = () => {
         }));
         setTreeData(origin => updateTreeData(origin, node.key, dbs));
       } else {
+        setConnectionStates(prev => ({ ...prev, [conn.id]: 'error' }));
         message.error(res.message);
       }
   };
@@ -153,6 +160,7 @@ const Sidebar: React.FC = () => {
       };
       const res = await MySQLGetTables(config as any, conn.dbName);
       if (res.success) {
+        setConnectionStates(prev => ({ ...prev, [key as string]: 'success' }));
         const tables = (res.data as any[]).map((row: any) => {
             const tableName = Object.values(row)[0] as string;
             return {
@@ -167,6 +175,7 @@ const Sidebar: React.FC = () => {
         
         setTreeData(origin => updateTreeData(origin, key, [queriesNode, ...tables]));
       } else {
+        setConnectionStates(prev => ({ ...prev, [key as string]: 'error' }));
         message.error(res.message);
       }
   };
@@ -425,6 +434,24 @@ const Sidebar: React.FC = () => {
   }, [searchValue, treeData]);
 
   const titleRender = (node: any) => {
+    // Determine status
+    let status: 'success' | 'error' | 'default' = 'default';
+    if (node.type === 'connection') {
+        if (connectionStates[node.key] === 'success') status = 'success';
+        else if (connectionStates[node.key] === 'error') status = 'error';
+    } else if (node.type === 'database') {
+        if (connectionStates[node.key] === 'success') status = 'success';
+        else if (connectionStates[node.key] === 'error') status = 'error';
+    }
+    
+    // Override if active context? (Optional, user asked for "connected" status)
+    // If we want to show "Active" as Green even if not loaded?
+    // Let's stick to "Connected" state derived from successful load.
+
+    const statusBadge = node.type === 'connection' || node.type === 'database' ? (
+        <Badge status={status} style={{ marginRight: 8 }} />
+    ) : null;
+
     if (node.type === 'connection') {
         const items: MenuProps['items'] = [
             {
@@ -457,10 +484,50 @@ const Sidebar: React.FC = () => {
                    });
                }
              },
+             { type: 'divider' },
+             {
+                 key: 'edit',
+                 label: '编辑连接',
+                 icon: <EditOutlined />,
+                 onClick: () => {
+                     if (onEditConnection) onEditConnection(node.dataRef);
+                 }
+             },
+             {
+                 key: 'disconnect',
+                 label: '断开连接',
+                 icon: <DisconnectOutlined />,
+                 onClick: () => {
+                     // Reset status
+                     setConnectionStates(prev => {
+                         const next = { ...prev };
+                         delete next[node.key];
+                         return next;
+                     });
+                     // Collapse node
+                     setExpandedKeys(prev => prev.filter(k => k !== node.key));
+                     // Clear children
+                     setTreeData(origin => updateTreeData(origin, node.key, []));
+                     message.success("已断开连接");
+                 }
+             },
+             {
+                 key: 'delete',
+                 label: '删除连接',
+                 icon: <DeleteOutlined />,
+                 danger: true,
+                 onClick: () => {
+                     Modal.confirm({
+                         title: '确认删除',
+                         content: `确定要删除连接 "${node.title}" 吗？`,
+                         onOk: () => removeConnection(node.key)
+                     });
+                 }
+             }
         ];
         return (
             <Dropdown menu={{ items, triggerSubMenuAction: 'click' }} trigger={['contextMenu']}>
-                <span title={node.title}>{node.title}</span>
+                <span title={node.title}>{statusBadge}{node.title}</span>
             </Dropdown>
         );
     } else if (node.type === 'database') {
@@ -478,6 +545,23 @@ const Sidebar: React.FC = () => {
                onClick: () => loadTables(node)
            },
            { type: 'divider' },
+           {
+               key: 'disconnect-db',
+               label: '关闭数据库',
+               icon: <DisconnectOutlined />,
+               onClick: () => {
+                   // Reset status
+                   setConnectionStates(prev => {
+                       const next = { ...prev };
+                       delete next[node.key];
+                       return next;
+                   });
+                   // Collapse node
+                   setExpandedKeys(prev => prev.filter(k => k !== node.key));
+                   // Clear children
+                   setTreeData(origin => updateTreeData(origin, node.key, []));
+               }
+           },
            { 
                key: 'new-query', 
                label: '新建查询', 
@@ -501,7 +585,7 @@ const Sidebar: React.FC = () => {
        ];
        return (
          <Dropdown menu={{ items, triggerSubMenuAction: 'click' }} trigger={['contextMenu']}>
-           <span title={node.title}>{node.title}</span>
+           <span title={node.title}>{statusBadge}{node.title}</span>
          </Dropdown>
        );
     } else if (node.type === 'table') {
@@ -554,7 +638,7 @@ const Sidebar: React.FC = () => {
         <div style={{ padding: '4px 8px' }}>
             <Search placeholder="搜索..." onChange={onSearch} size="small" />
         </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
             <Tree
                 showIcon
                 loadData={onLoadData}
@@ -566,7 +650,6 @@ const Sidebar: React.FC = () => {
                 onExpand={onExpand}
                 autoExpandParent={autoExpandParent}
                 blockNode
-                height={500}
             />
         </div>
 

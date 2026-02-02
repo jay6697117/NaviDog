@@ -51,6 +51,9 @@ jobs:
       - name: Package macOS Application
         if: contains(matrix.platform, 'darwin')
         run: |
+          # Install create-dmg
+          brew install create-dmg
+
           cd build/bin
           echo "📂 列出 build/bin 目录内容:"
           ls -F
@@ -63,8 +66,24 @@ jobs:
             exit 1
           fi
           
-          echo "📦 正在压缩 $APP_NAME..."
-          zip -r "../../${{ matrix.artifact_name }}.zip" "$APP_NAME"
+          DMG_NAME="${{ matrix.artifact_name }}.dmg"
+          
+          echo "📦 正在生成 DMG: $DMG_NAME..."
+          
+          # Create DMG
+          create-dmg \
+            --volname "GoNavi Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "$APP_NAME" 200 190 \
+            --hide-extension "$APP_NAME" \
+            --app-drop-link 600 185 \
+            "$DMG_NAME" \
+            "$APP_NAME"
+            
+          # Move DMG to root for upload
+          mv "$DMG_NAME" "../../$DMG_NAME"
 
       - name: Package Windows Executable
         if: contains(matrix.platform, 'windows')
@@ -96,7 +115,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            ${{ matrix.artifact_name }}.zip
+            ${{ matrix.artifact_name }}.dmg
             ${{ matrix.artifact_name }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

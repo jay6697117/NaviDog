@@ -1,14 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, InputNumber, Button, message, Checkbox, Divider, Collapse, Select } from 'antd';
 import { useStore } from '../store';
 import { MySQLConnect } from '../../wailsjs/go/app/App';
+import { SavedConnection } from '../types';
 
-const ConnectionModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
+const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialValues?: SavedConnection | null }> = ({ open, onClose, initialValues }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [useSSH, setUseSSH] = useState(false);
   const [dbType, setDbType] = useState('mysql');
   const addConnection = useStore((state) => state.addConnection);
+  const updateConnection = useStore((state) => state.updateConnection);
+
+  useEffect(() => {
+      if (open) {
+          if (initialValues) {
+              form.setFieldsValue({
+                  type: initialValues.config.type,
+                  name: initialValues.name,
+                  host: initialValues.config.host,
+                  port: initialValues.config.port,
+                  user: initialValues.config.user,
+                  password: initialValues.config.password,
+                  database: initialValues.config.database,
+                  useSSH: initialValues.config.useSSH,
+                  sshHost: initialValues.config.ssh?.host,
+                  sshPort: initialValues.config.ssh?.port,
+                  sshUser: initialValues.config.ssh?.user,
+                  sshPassword: initialValues.config.ssh?.password,
+                  sshKeyPath: initialValues.config.ssh?.keyPath,
+              });
+              setUseSSH(initialValues.config.useSSH || false);
+              setDbType(initialValues.config.type);
+          } else {
+              form.resetFields();
+              setUseSSH(false);
+              setDbType('mysql');
+          }
+      }
+  }, [open, initialValues]);
 
   const handleOk = async () => {
     try {
@@ -38,12 +68,20 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
       setLoading(false);
       
       if (res.success) {
-        addConnection({
-          id: Date.now().toString(),
+        const newConn = {
+          id: initialValues ? initialValues.id : Date.now().toString(),
           name: values.name || (values.type === 'sqlite' ? 'SQLite DB' : values.host),
           config: config
-        });
-        message.success('连接已保存！');
+        };
+
+        if (initialValues) {
+            updateConnection(newConn);
+            message.success('连接已更新！');
+        } else {
+            addConnection(newConn);
+            message.success('连接已保存！');
+        }
+        
         form.resetFields();
         setUseSSH(false);
         setDbType('mysql');
@@ -60,7 +98,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
 
   return (
     <Modal 
-        title="新建连接" 
+        title={initialValues ? "编辑连接" : "新建连接"}
         open={open} 
         onCancel={onClose} 
         onOk={handleOk} 
@@ -69,7 +107,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void }> = ({ ope
         cancelText="取消" 
         width={600}
         zIndex={10001} // Increase z-index
-        destroyOnClose // Reset on close
+        destroyOnHidden // Reset on close
         maskClosable={false} // Prevent accidental close by clicking mask, user must click X or Cancel
     >
       <Form 

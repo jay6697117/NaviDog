@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useMemo } from 'react';
+import React, { useEffect, useState, useContext, useMemo, useRef } from 'react';
 import { Table, Tabs, Button, message, Input, Checkbox, Modal, AutoComplete, Tooltip, Select } from 'antd';
 import { ReloadOutlined, SaveOutlined, PlusOutlined, DeleteOutlined, MenuOutlined, FileTextOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
@@ -165,6 +165,21 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
   
   const connections = useStore(state => state.connections);
   const readOnly = !!tab.readOnly;
+
+  const [tableHeight, setTableHeight] = useState(500);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      if (!containerRef.current) return;
+      const resizeObserver = new ResizeObserver(entries => {
+          for (let entry of entries) {
+              const h = Math.max(200, entry.contentRect.height - 40);
+              setTableHeight(h);
+          }
+      });
+      resizeObserver.observe(containerRef.current);
+      return () => resizeObserver.disconnect();
+  }, [activeKey]); // Re-attach when tab switches
 
   // --- Resizable Columns State ---
   const [tableColumns, setTableColumns] = useState<any[]>([]);
@@ -531,7 +546,15 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
     }),
   }));
 
-  const columnsTabContent = readOnly ? (
+  const columnsTabContent = (
+      <div ref={containerRef} className="table-designer-wrapper" style={{ height: '100%', overflow: 'hidden', position: 'relative' }}>
+        <style>{`
+           .table-designer-wrapper .ant-table-body {
+               height: ${tableHeight}px !important;
+               max-height: ${tableHeight}px !important;
+           }
+        `}</style>
+        {readOnly ? (
         <Table 
             dataSource={columns} 
             columns={resizableColumns} 
@@ -539,7 +562,7 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
             size="small" 
             pagination={false} 
             loading={loading}
-            scroll={{ y: 'calc(100vh - 200px)' }}
+            scroll={{ y: tableHeight }}
             bordered
             components={{
               header: {
@@ -557,7 +580,7 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
                 size="small" 
                 pagination={false} 
                 loading={loading}
-                scroll={{ y: 'calc(100vh - 200px)' }}
+                scroll={{ y: tableHeight }}
                 bordered
                 components={{
                     body: { row: SortableRow },
@@ -566,6 +589,8 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
             />
         </SortableContext>
       </DndContext>
+  )}
+  </div>
   );
 
   return (

@@ -10,7 +10,7 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
   const [columnNames, setColumnNames] = useState<string[]>([]);
   const [pkColumns, setPkColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const connections = useStore(state => state.connections);
+  const { connections, addSqlLog } = useStore();
 
   const [pagination, setPagination] = useState({
       current: 1,
@@ -65,6 +65,7 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
     const offset = (page - 1) * size;
     sql += ` LIMIT ${size} OFFSET ${offset}`;
 
+    const startTime = Date.now();
     try {
         const pCount = MySQLQuery(config as any, dbName, countSql);
         const pData = MySQLQuery(config as any, dbName, sql);
@@ -75,6 +76,29 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
         }
 
         const [resCount, resData] = await Promise.all([pCount, pData]);
+        const duration = Date.now() - startTime;
+        
+        // Log Execution
+        addSqlLog({
+            id: `log-${Date.now()}-count`,
+            timestamp: Date.now(),
+            sql: countSql,
+            status: resCount.success ? 'success' : 'error',
+            duration: duration / 2, // Estimate
+            message: resCount.success ? '' : resCount.message,
+            dbName
+        });
+        
+        addSqlLog({
+            id: `log-${Date.now()}-data`,
+            timestamp: Date.now(),
+            sql: sql,
+            status: resData.success ? 'success' : 'error',
+            duration: duration,
+            message: resData.success ? '' : resData.message,
+            affectedRows: Array.isArray(resData.data) ? resData.data.length : undefined,
+            dbName
+        });
         
         if (pCols) {
             const resCols = await pCols;
@@ -107,6 +131,15 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
         }
     } catch (e: any) {
         message.error("Error fetching data: " + e.message);
+        addSqlLog({
+            id: `log-${Date.now()}-error`,
+            timestamp: Date.now(),
+            sql: sql,
+            status: 'error',
+            duration: Date.now() - startTime,
+            message: e.message,
+            dbName
+        });
     }
     setLoading(false);
   }, [connections, tab, sortInfo, filterConditions, pkColumns.length]); 
