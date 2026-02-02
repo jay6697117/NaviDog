@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Tree, message, Dropdown, MenuProps, Input, Button, Modal, Form, Badge } from 'antd';
 import { 
   DatabaseOutlined, 
@@ -46,6 +46,23 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
   const [searchValue, setSearchValue] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
+  const [loadedKeys, setLoadedKeys] = useState<React.Key[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: MenuProps['items'] } | null>(null);
+  
+  // Virtual Scroll State
+  const [treeHeight, setTreeHeight] = useState(500);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      if (!treeContainerRef.current) return;
+      const resizeObserver = new ResizeObserver(entries => {
+          for (let entry of entries) {
+              setTreeHeight(entry.contentRect.height);
+          }
+      });
+      resizeObserver.observe(treeContainerRef.current);
+      return () => resizeObserver.disconnect();
+  }, []);
   
   // Connection Status State: key -> 'success' | 'error'
   const [connectionStates, setConnectionStates] = useState<Record<string, 'success' | 'error'>>({});
@@ -87,7 +104,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
     })));
   }, [connections]);
 
-  const updateTreeData = (list: TreeNode[], key: React.Key, children: TreeNode[]): TreeNode[] => {
+  const updateTreeData = (list: TreeNode[], key: React.Key, children: TreeNode[] | undefined): TreeNode[] => {
     return list.map(node => {
       if (node.key === key) {
         return { ...node, children };
@@ -112,7 +129,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       const res = await MySQLGetDatabases(config as any);
       if (res.success) {
         setConnectionStates(prev => ({ ...prev, [conn.id]: 'success' }));
-        const dbs = (res.data as any[]).map((row: any) => ({
+        let dbs = (res.data as any[]).map((row: any) => ({
           title: row.Database || row.database,
           key: `${conn.id}-${row.Database || row.database}`,
           icon: <DatabaseOutlined />,
@@ -120,6 +137,12 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           dataRef: { ...conn, dbName: row.Database || row.database },
           isLeaf: false,
         }));
+
+        // Filter databases if configured
+        if (conn.includeDatabases && conn.includeDatabases.length > 0) {
+            dbs = dbs.filter(db => conn.includeDatabases!.includes(db.title));
+        }
+
         setTreeData(origin => updateTreeData(origin, node.key, dbs));
       } else {
         setConnectionStates(prev => ({ ...prev, [conn.id]: 'error' }));
@@ -433,27 +456,9 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       return loop(treeData);
   }, [searchValue, treeData]);
 
-  const titleRender = (node: any) => {
-    // Determine status
-    let status: 'success' | 'error' | 'default' = 'default';
+  const getNodeMenuItems = (node: any): MenuProps['items'] => {
     if (node.type === 'connection') {
-        if (connectionStates[node.key] === 'success') status = 'success';
-        else if (connectionStates[node.key] === 'error') status = 'error';
-    } else if (node.type === 'database') {
-        if (connectionStates[node.key] === 'success') status = 'success';
-        else if (connectionStates[node.key] === 'error') status = 'error';
-    }
-    
-    // Override if active context? (Optional, user asked for "connected" status)
-    // If we want to show "Active" as Green even if not loaded?
-    // Let's stick to "Connected" state derived from successful load.
-
-    const statusBadge = node.type === 'connection' || node.type === 'database' ? (
-        <Badge status={status} style={{ marginRight: 8 }} />
-    ) : null;
-
-    if (node.type === 'connection') {
-        const items: MenuProps['items'] = [
+        return [
             {
                 key: 'new-db',
                 label: '新建数据库',
@@ -498,16 +503,14 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                  label: '断开连接',
                  icon: <DisconnectOutlined />,
                  onClick: () => {
-                     // Reset status
                      setConnectionStates(prev => {
                          const next = { ...prev };
                          delete next[node.key];
                          return next;
                      });
-                     // Collapse node
                      setExpandedKeys(prev => prev.filter(k => k !== node.key));
-                     // Clear children
-                     setTreeData(origin => updateTreeData(origin, node.key, []));
+                     setLoadedKeys(prev => prev.filter(k => k !== node.key));
+                     setTreeData(origin => updateTreeData(origin, node.key, undefined));
                      message.success("已断开连接");
                  }
              },
@@ -525,13 +528,8 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                  }
              }
         ];
-        return (
-            <Dropdown menu={{ items, triggerSubMenuAction: 'click' }} trigger={['contextMenu']}>
-                <span title={node.title}>{statusBadge}{node.title}</span>
-            </Dropdown>
-        );
     } else if (node.type === 'database') {
-       const items: MenuProps['items'] = [
+       return [
            {
                key: 'new-table',
                label: '新建表',
@@ -550,16 +548,14 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                label: '关闭数据库',
                icon: <DisconnectOutlined />,
                onClick: () => {
-                   // Reset status
                    setConnectionStates(prev => {
                        const next = { ...prev };
                        delete next[node.key];
                        return next;
                    });
-                   // Collapse node
                    setExpandedKeys(prev => prev.filter(k => k !== node.key));
-                   // Clear children
-                   setTreeData(origin => updateTreeData(origin, node.key, []));
+                   setLoadedKeys(prev => prev.filter(k => k !== node.key));
+                   setTreeData(origin => updateTreeData(origin, node.key, undefined));
                }
            },
            { 
@@ -583,13 +579,23 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                  onClick: () => handleRunSQLFile(node)
              }
        ];
-       return (
-         <Dropdown menu={{ items, triggerSubMenuAction: 'click' }} trigger={['contextMenu']}>
-           <span title={node.title}>{statusBadge}{node.title}</span>
-         </Dropdown>
-       );
     } else if (node.type === 'table') {
-        const contextMenu: MenuProps['items'] = [
+        return [
+            {
+                key: 'new-query',
+                label: '新建查询',
+                icon: <ConsoleSqlOutlined />,
+                onClick: () => {
+                   addTab({
+                       id: `query-${Date.now()}`,
+                       title: `新建查询`,
+                       type: 'query',
+                       connectionId: node.dataRef.id,
+                       dbName: node.dataRef.dbName
+                   });
+                }
+            },
+            { type: 'divider' },
             {
                 key: 'design-table',
                 label: '设计表',
@@ -623,14 +629,33 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                 ]
             }
         ];
-
-        return (
-            <Dropdown menu={{ items: contextMenu, triggerSubMenuAction: 'click' }} trigger={['contextMenu']}>
-                <span title={node.title}>{node.title}</span>
-            </Dropdown>
-        );
     }
-    return <span title={node.title}>{node.title}</span>;
+    return [];
+  };
+
+  const titleRender = (node: any) => {
+    let status: 'success' | 'error' | 'default' = 'default';
+    if (node.type === 'connection' || node.type === 'database') {
+        if (connectionStates[node.key] === 'success') status = 'success';
+        else if (connectionStates[node.key] === 'error') status = 'error';
+    }
+    
+    const statusBadge = node.type === 'connection' || node.type === 'database' ? (
+        <Badge status={status} style={{ marginRight: 8 }} />
+    ) : null;
+
+    return <span title={node.title}>{statusBadge}{node.title}</span>;
+  };
+
+  const onRightClick = ({ event, node }: any) => {
+      const items = getNodeMenuItems(node);
+      if (items && items.length > 0) {
+          setContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+              items
+          });
+      }
   };
 
   return (
@@ -638,7 +663,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
         <div style={{ padding: '4px 8px' }}>
             <Search placeholder="搜索..." onChange={onSearch} size="small" />
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+        <div ref={treeContainerRef} style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
             <Tree
                 showIcon
                 loadData={onLoadData}
@@ -648,10 +673,25 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                 titleRender={titleRender}
                 expandedKeys={expandedKeys}
                 onExpand={onExpand}
+                loadedKeys={loadedKeys}
+                onLoad={setLoadedKeys}
                 autoExpandParent={autoExpandParent}
                 blockNode
+                height={treeHeight}
+                onRightClick={onRightClick}
             />
         </div>
+
+        {contextMenu && (
+            <Dropdown
+                menu={{ items: contextMenu.items }}
+                open={true}
+                onOpenChange={(open) => { if (!open) setContextMenu(null); }}
+                trigger={['contextMenu']}
+            >
+                <div style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, width: 1, height: 1 }} />
+            </Dropdown>
+        )}
 
         <Modal
             title="新建数据库"

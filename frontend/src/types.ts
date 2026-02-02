@@ -21,6 +21,7 @@ export interface SavedConnection {
   id: string;
   name: string;
   config: ConnectionConfig;
+  includeDatabases?: string[];
 }
 
 export interface ColumnDefinition {

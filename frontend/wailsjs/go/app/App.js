@@ -58,6 +58,10 @@ export function ExportTable(arg1, arg2, arg3, arg4) {
   return window['go']['app']['App']['ExportTable'](arg1, arg2, arg3, arg4);
 }
 
+export function ImportConfigFile() {
+  return window['go']['app']['App']['ImportConfigFile']();
+}
+
 export function ImportData(arg1, arg2, arg3) {
   return window['go']['app']['App']['ImportData'](arg1, arg2, arg3);
 }
@@ -84,4 +88,8 @@ export function MySQLShowCreateTable(arg1, arg2, arg3) {
 
 export function OpenSQLFile() {
   return window['go']['app']['App']['OpenSQLFile']();
+}
+
+export function TestConnection(arg1) {
+  return window['go']['app']['App']['TestConnection'](arg1);
 }

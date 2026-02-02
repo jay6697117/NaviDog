@@ -41,7 +41,9 @@ func (m *MySQLDB) Connect(config connection.ConnectionConfig) error {
 		return err
 	}
 	m.conn = db
-	return nil
+	
+	// Force verification
+	return m.Ping()
 }
 
 func (m *MySQLDB) Close() error {

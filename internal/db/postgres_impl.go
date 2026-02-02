@@ -40,7 +40,9 @@ func (p *PostgresDB) Connect(config connection.ConnectionConfig) error {
 		return err
 	}
 	p.conn = db
-	return nil
+	
+	// Force verification
+	return p.Ping()
 }
 
 func (p *PostgresDB) Close() error {

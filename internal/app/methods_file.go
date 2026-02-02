@@ -44,6 +44,33 @@ func (a *App) OpenSQLFile() connection.QueryResult {
 	return connection.QueryResult{Success: true, Data: string(content)}
 }
 
+func (a *App) ImportConfigFile() connection.QueryResult {
+	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Config File",
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "JSON Files (*.json)",
+				Pattern:     "*.json",
+			},
+		},
+	})
+
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	if selection == "" {
+		return connection.QueryResult{Success: false, Message: "Cancelled"}
+	}
+
+	content, err := os.ReadFile(selection)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	return connection.QueryResult{Success: true, Data: string(content)}
+}
+
 func (a *App) ImportData(config connection.ConnectionConfig, dbName, tableName string) connection.QueryResult {
 	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: fmt.Sprintf("Import into %s", tableName),

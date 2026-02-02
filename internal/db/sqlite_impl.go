@@ -22,7 +22,9 @@ func (s *SQLiteDB) Connect(config connection.ConnectionConfig) error {
 		return err
 	}
 	s.conn = db
-	return nil
+	
+	// Force verification
+	return s.Ping()
 }
 
 func (s *SQLiteDB) Close() error {

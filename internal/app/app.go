@@ -40,7 +40,16 @@ func (a *App) Shutdown(ctx context.Context) {
 
 // Helper: Generate a unique key for the connection config
 func getCacheKey(config connection.ConnectionConfig) string {
-	return fmt.Sprintf("%s|%s|%s:%d|%s|%s|%v", config.Type, config.User, config.Host, config.Port, config.Database, config.SSH.Host, config.UseSSH)
+	sshPart := ""
+	if config.UseSSH {
+		sshPart = fmt.Sprintf("|ssh:%s@%s:%d|%s", config.SSH.User, config.SSH.Host, config.SSH.Port, config.SSH.KeyPath)
+		// We don't include SSH password in key string to avoid log exposure if key is logged, 
+		// but for cache uniqueness it is critical. 
+		// Let's include a hash or just the value if we assume internal use.
+		// Including value for correctness.
+		sshPart += "|" + config.SSH.Password
+	}
+	return fmt.Sprintf("%s|%s:%s@%s:%d|%s%s", config.Type, config.User, config.Password, config.Host, config.Port, config.Database, sshPart)
 }
 
 // Helper: Get or create a database connection

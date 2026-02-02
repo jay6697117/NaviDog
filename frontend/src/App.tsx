@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, ConfigProvider, theme } from 'antd';
-import { PlusOutlined, BulbOutlined, BulbFilled, ConsoleSqlOutlined, BugOutlined } from '@ant-design/icons';
+import { Layout, Button, ConfigProvider, theme, Dropdown, MenuProps, message } from 'antd';
+import { PlusOutlined, BulbOutlined, BulbFilled, ConsoleSqlOutlined, BugOutlined, SettingOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons';
 import Sidebar from './components/Sidebar';
 import TabManager from './components/TabManager';
 import ConnectionModal from './components/ConnectionModal';
@@ -14,7 +14,82 @@ const { Sider, Content } = Layout;
 function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<SavedConnection | null>(null);
-  const { darkMode, toggleDarkMode, addTab, activeContext } = useStore();
+  const { darkMode, toggleDarkMode, addTab, activeContext, connections, addConnection, tabs, activeTabId } = useStore();
+
+  const handleNewQuery = () => {
+      let connId = activeContext?.connectionId || '';
+      let db = activeContext?.dbName || '';
+
+      // Priority: Active Tab Context > Sidebar Selection
+      if (activeTabId) {
+          const currentTab = tabs.find(t => t.id === activeTabId);
+          if (currentTab && currentTab.connectionId) {
+              connId = currentTab.connectionId;
+              db = currentTab.dbName || '';
+          }
+      }
+
+      addTab({
+          id: `query-${Date.now()}`,
+          title: '新建查询',
+          type: 'query',
+          connectionId: connId,
+          dbName: db
+      });
+  };
+
+  const handleImportConnections = async () => {
+      const res = await (window as any).go.app.App.ImportConfigFile();
+      if (res.success) {
+          try {
+              const imported = JSON.parse(res.data);
+              if (Array.isArray(imported)) {
+                  let count = 0;
+                  imported.forEach((conn: any) => {
+                      if (!connections.some(c => c.id === conn.id)) {
+                          addConnection(conn);
+                          count++;
+                      }
+                  });
+                  message.success(`成功导入 ${count} 个连接`);
+              } else {
+                  message.error("文件格式错误：需要 JSON 数组");
+              }
+          } catch (e) {
+              message.error("解析 JSON 失败");
+          }
+      } else if (res.message !== "Cancelled") {
+          message.error("导入失败: " + res.message);
+      }
+  };
+
+  const handleExportConnections = async () => {
+      if (connections.length === 0) {
+          message.warning("没有连接可导出");
+          return;
+      }
+      const res = await (window as any).go.app.App.ExportData(connections, [], "connections", "json");
+      if (res.success) {
+          message.success("导出成功");
+      } else if (res.message !== "Cancelled") {
+          message.error("导出失败: " + res.message);
+      }
+  };
+
+  const settingsMenu: MenuProps['items'] = [
+      {
+          key: 'import',
+          label: '导入连接配置',
+          icon: <UploadOutlined />,
+          onClick: handleImportConnections
+      },
+      {
+          key: 'export',
+          label: '导出连接配置',
+          icon: <DownloadOutlined />,
+          onClick: handleExportConnections
+      }
+  ];
 
   // Log Panel
   const [logPanelHeight, setLogPanelHeight] = useState(200);
@@ -151,40 +226,37 @@ function App() {
             width={sidebarWidth} 
             style={{ 
                 borderRight: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', 
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column'
+                position: 'relative'
             }}
           >
-            <div style={{ padding: '10px', borderBottom: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontWeight: 'bold', paddingLeft: 8 }}>GoNavi</span>
-              <div>
-                  <Button type="text" icon={darkMode ? <BulbFilled /> : <BulbOutlined />} onClick={toggleDarkMode} title="切换主题" />
-                  <Button type="text" icon={<ConsoleSqlOutlined />} onClick={() => addTab({
-                      id: `query-${Date.now()}`,
-                      title: '新建查询',
-                      type: 'query',
-                      connectionId: activeContext?.connectionId || '',
-                      dbName: activeContext?.dbName || ''
-                  })} title="新建查询" />
-                  <Button type="text" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)} title="新建连接" />
-              </div>
-            </div>
-            
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-                <Sidebar onEditConnection={handleEditConnection} />
-            </div>
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ padding: '10px', borderBottom: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                <span style={{ fontWeight: 'bold', paddingLeft: 8 }}>GoNavi</span>
+                <div>
+                    <Button type="text" icon={darkMode ? <BulbFilled /> : <BulbOutlined />} onClick={toggleDarkMode} title="切换主题" />
+                    <Button type="text" icon={<ConsoleSqlOutlined />} onClick={handleNewQuery} title="新建查询" />
+                    <Button type="text" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)} title="新建连接" />
+                    <Dropdown menu={{ items: settingsMenu }} placement="bottomRight">
+                        <Button type="text" icon={<SettingOutlined />} title="更多设置" />
+                    </Dropdown>
+                </div>
+                </div>
+                
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <Sidebar onEditConnection={handleEditConnection} />
+                </div>
 
-            {/* Sidebar Footer for Log Toggle */}
-            <div style={{ padding: '8px', borderTop: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', display: 'flex', justifyContent: 'center' }}>
-                 <Button 
-                    type={isLogPanelOpen ? "primary" : "text"} 
-                    icon={<BugOutlined />} 
-                    onClick={() => setIsLogPanelOpen(!isLogPanelOpen)}
-                    block
-                 >
-                    SQL 执行日志
-                 </Button>
+                {/* Sidebar Footer for Log Toggle */}
+                <div style={{ padding: '8px', borderTop: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                    <Button 
+                        type={isLogPanelOpen ? "primary" : "text"} 
+                        icon={<BugOutlined />} 
+                        onClick={() => setIsLogPanelOpen(!isLogPanelOpen)}
+                        block
+                    >
+                        SQL 执行日志
+                    </Button>
+                </div>
             </div>
             
             {/* Sidebar Resize Handle */}
