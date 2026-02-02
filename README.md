@@ -1,6 +1,10 @@
 # GoNavi - 现代化的轻量级数据库管理工具
-
-![GoNavi Banner](https://socialify.git.ci/yangguofeng/GoNavi/image?description=1&font=Inter&language=1&name=1&owner=1&pattern=Circuit%20Board&theme=Auto)
+<img width="1200" height="1116" alt="image" src="https://github.com/user-attachments/assets/d15fa9e9-5486-423b-a0e9-53b467e45432" />
+<img width="4096" height="2180" alt="image" src="https://github.com/user-attachments/assets/330ce49b-45f1-4919-ae14-75f7d47e5f73" />
+<img width="4096" height="2304" alt="image" src="https://github.com/user-attachments/assets/341cda98-79a5-4198-90f3-1335131ccde0" />
+<img width="4096" height="2304" alt="image" src="https://github.com/user-attachments/assets/ec522145-5ceb-4481-ae46-a9251c89bdfc" />
+<img width="4096" height="2304" alt="image" src="https://github.com/user-attachments/assets/224a74e7-65df-4aef-9710-d8e82e3a70c1" />
+<img width="4096" height="2180" alt="image" src="https://github.com/user-attachments/assets/f0c57590-d987-4ecf-89b2-64efad60b6d7" />
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/yangguofeng/GoNavi)](https://go.dev/)
 [![Wails Version](https://img.shields.io/badge/Wails-v2-red)](https://wails.io)
