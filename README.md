@@ -10,7 +10,7 @@
 [![Wails Version](https://img.shields.io/badge/Wails-v2-red)](https://wails.io)
 [![React Version](https://img.shields.io/badge/React-v18-blue)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Syngnat/GoNavi/release.yml?label=Build)](https://github.com/yangguofeng/GoNavi/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Syngnat/GoNavi/release.yml?label=Build)](https://github.com/Syngnat/GoNavi/actions)
 
 **GoNavi** 是一款基于 **Wails (Go)** 和 **React** 构建的现代化、高性能、跨平台数据库管理客户端。它旨在提供如原生应用般流畅的用户体验，同时保持极低的资源占用。
 
