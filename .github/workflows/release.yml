@@ -48,42 +48,48 @@ jobs:
         run: |
           wails build -platform ${{ matrix.platform }} -clean -o ${{ matrix.artifact_name }}
 
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
+      - name: Package macOS Application
+        if: contains(matrix.platform, 'darwin')
         run: |
           cd build/bin
-          echo "📂 Listing build/bin contents:"
+          echo "📂 列出 build/bin 目录内容:"
           ls -F
           
-          # Find the .app bundle (safest way)
+          # Find .app bundle
           APP_NAME=$(find . -maxdepth 1 -name "*.app" | head -n 1)
           
           if [ -z "$APP_NAME" ]; then
-            echo "❌ No .app found!"
+            echo "❌ 未找到 .app 应用包!"
             exit 1
           fi
           
-          echo "📦 Zipping $APP_NAME..."
+          echo "📦 正在压缩 $APP_NAME..."
           zip -r "../../${{ matrix.artifact_name }}.zip" "$APP_NAME"
 
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
+      - name: Package Windows Executable
+        if: contains(matrix.platform, 'windows')
         shell: bash
         run: |
           cd build/bin
-          echo "📂 Listing build/bin contents:"
+          echo "📂 列出 build/bin 目录内容:"
           ls -F
           
-          # Find the .exe (safest way)
-          EXE_NAME=$(find . -maxdepth 1 -name "*.exe" | head -n 1)
+          TARGET="${{ matrix.artifact_name }}"
           
-          if [ -z "$EXE_NAME" ]; then
-             echo "❌ No .exe found!"
-             exit 1
+          if [ -f "$TARGET.exe" ]; then
+              echo "✅ 找到 $TARGET.exe"
+              FINAL_EXE="$TARGET.exe"
+          elif [ -f "$TARGET" ]; then
+              echo "⚠️ 找到无后缀文件 $TARGET，正在添加 .exe 后缀..."
+              mv "$TARGET" "$TARGET.exe"
+              FINAL_EXE="$TARGET.exe"
+          else
+              echo "❌ 未找到构建产物 '$TARGET'!"
+              exit 1
           fi
           
-          echo "📦 Moving $EXE_NAME..."
-          mv "$EXE_NAME" "../../${{ matrix.artifact_name }}.exe"
+          echo "📦 正在移动 $FINAL_EXE 到根目录..."
+          mv "$FINAL_EXE" "../../${{ matrix.artifact_name }}.exe"
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
