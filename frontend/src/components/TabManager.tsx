@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Tabs, Button } from 'antd';
 import { useStore } from '../store';
 import DataViewer from './DataViewer';
@@ -18,7 +18,7 @@ const TabManager: React.FC = () => {
     }
   };
 
-  const items = tabs.map(tab => {
+  const items = useMemo(() => tabs.map(tab => {
     let content;
     if (tab.type === 'query') {
       content = <QueryEditor tab={tab} />;
@@ -33,18 +33,24 @@ const TabManager: React.FC = () => {
       key: tab.id,
       children: content,
     };
-  });
+  }), [tabs]);
 
   return (
-    <Tabs
-      type="editable-card"
-      onChange={onChange}
-      activeKey={activeTabId || undefined}
-      onEdit={onEdit}
-      items={items}
-      style={{ height: '100%' }}
-      hideAdd
-    />
+    <>
+        <style>{`
+            .ant-tabs-content { height: 100%; }
+            .ant-tabs-tabpane { height: 100%; }
+        `}</style>
+        <Tabs
+            type="editable-card"
+            onChange={onChange}
+            activeKey={activeTabId || undefined}
+            onEdit={onEdit}
+            items={items}
+            style={{ height: '100%' }}
+            hideAdd
+        />
+    </>
   );
 };
 

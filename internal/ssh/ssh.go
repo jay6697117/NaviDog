@@ -1,4 +1,4 @@
-package main
+package ssh
 
 import (
 	"context"
@@ -7,17 +7,11 @@ import (
 	"os"
 	"time"
 
+	"GoNavi-Wails/internal/connection"
+
 	"github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/ssh"
 )
-
-type SSHConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	KeyPath  string `json:"keyPath"`
-}
 
 // ViaSSHDialer registers a custom network for MySQL that proxies through SSH
 type ViaSSHDialer struct {
@@ -29,7 +23,7 @@ func (d *ViaSSHDialer) Dial(ctx context.Context, addr string) (net.Conn, error) 
 }
 
 // connectSSH establishes an SSH connection and returns a Dialer
-func connectSSH(config SSHConfig) (*ssh.Client, error) {
+func connectSSH(config connection.SSHConfig) (*ssh.Client, error) {
 	authMethods := []ssh.AuthMethod{}
 
 	if config.KeyPath != "" {
@@ -59,7 +53,7 @@ func connectSSH(config SSHConfig) (*ssh.Client, error) {
 
 // RegisterSSHNetwork registers a unique network name for a specific SSH tunnel
 // Returns the network name to use in DSN
-func RegisterSSHNetwork(sshConfig SSHConfig) (string, error) {
+func RegisterSSHNetwork(sshConfig connection.SSHConfig) (string, error) {
 	client, err := connectSSH(sshConfig)
 	if err != nil {
 		return "", err

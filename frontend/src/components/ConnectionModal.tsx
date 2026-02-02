@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Form, Input, InputNumber, Button, message, Checkbox, Divider, Collapse, Select } from 'antd';
 import { useStore } from '../store';
-import { MySQLConnect } from '../../wailsjs/go/main/App';
+import { MySQLConnect } from '../../wailsjs/go/app/App';
 
 const ConnectionModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
   const [form] = Form.useForm();

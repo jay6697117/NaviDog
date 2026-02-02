@@ -1,9 +1,12 @@
-package main
+package db
 
 import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"GoNavi-Wails/internal/connection"
+	"GoNavi-Wails/internal/utils"
 
 	_ "modernc.org/sqlite"
 )
@@ -12,8 +15,7 @@ type SQLiteDB struct {
 	conn *sql.DB
 }
 
-func (s *SQLiteDB) Connect(config ConnectionConfig) error {
-	// Host field will be used as File Path for SQLite
+func (s *SQLiteDB) Connect(config connection.ConnectionConfig) error {
 	dsn := config.Host 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -34,7 +36,7 @@ func (s *SQLiteDB) Ping() error {
 	if s.conn == nil {
 		return fmt.Errorf("connection not open")
 	}
-	ctx, cancel := contextWithTimeout(5 * time.Second)
+	ctx, cancel := utils.ContextWithTimeout(5 * time.Second)
 	defer cancel()
 	return s.conn.PingContext(ctx)
 }
@@ -98,7 +100,6 @@ func (s *SQLiteDB) Exec(query string) (int64, error) {
 }
 
 func (s *SQLiteDB) GetDatabases() ([]string, error) {
-	// SQLite only has one DB (the file).
 	return []string{"main"}, nil
 }
 
@@ -132,24 +133,22 @@ func (s *SQLiteDB) GetCreateStatement(dbName, tableName string) (string, error) 
 	return "", fmt.Errorf("create statement not found")
 }
 
-func (s *SQLiteDB) GetColumns(dbName, tableName string) ([]ColumnDefinition, error) {
-	// SQLite has PRAGMA table_info(tableName)
-	// For MVP Stub:
-	return []ColumnDefinition{}, nil
+func (s *SQLiteDB) GetColumns(dbName, tableName string) ([]connection.ColumnDefinition, error) {
+	return []connection.ColumnDefinition{}, nil
 }
 
-func (s *SQLiteDB) GetIndexes(dbName, tableName string) ([]IndexDefinition, error) {
-	return []IndexDefinition{}, nil
+func (s *SQLiteDB) GetIndexes(dbName, tableName string) ([]connection.IndexDefinition, error) {
+	return []connection.IndexDefinition{}, nil
 }
 
-func (s *SQLiteDB) GetForeignKeys(dbName, tableName string) ([]ForeignKeyDefinition, error) {
-	return []ForeignKeyDefinition{}, nil
+func (s *SQLiteDB) GetForeignKeys(dbName, tableName string) ([]connection.ForeignKeyDefinition, error) {
+	return []connection.ForeignKeyDefinition{}, nil
 }
 
-func (s *SQLiteDB) GetTriggers(dbName, tableName string) ([]TriggerDefinition, error) {
-	return []TriggerDefinition{}, nil
+func (s *SQLiteDB) GetTriggers(dbName, tableName string) ([]connection.TriggerDefinition, error) {
+	return []connection.TriggerDefinition{}, nil
 }
 
-func (s *SQLiteDB) GetAllColumns(dbName string) ([]ColumnDefinitionWithTable, error) {
-	return []ColumnDefinitionWithTable{}, nil
+func (s *SQLiteDB) GetAllColumns(dbName string) ([]connection.ColumnDefinitionWithTable, error) {
+	return []connection.ColumnDefinitionWithTable{}, nil
 }

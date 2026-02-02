@@ -4,7 +4,7 @@
 APP_NAME="GoNavi"
 DIST_DIR="dist"
 BUILD_BIN_DIR="build/bin"
-DEFAULT_BINARY_NAME="gonavi" # 对应 wails.json 中的 outputfilename
+DEFAULT_BINARY_NAME="GoNavi" # 对应 wails.json 中的 outputfilename
 
 # 提取版本号
 VERSION=$(grep '"version":' frontend/package.json | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[[:space:]]')

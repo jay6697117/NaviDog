@@ -1,20 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { Button, Table, message, Modal, Input, Form, Dropdown, MenuProps, Tooltip } from 'antd';
+import { Button, message, Modal, Input, Form, Dropdown, MenuProps, Tooltip, Select } from 'antd';
 import { PlayCircleOutlined, SaveOutlined, FormatPainterOutlined, SettingOutlined } from '@ant-design/icons';
 import { format } from 'sql-formatter';
-import { TabData } from '../types';
+import { TabData, ColumnDefinition } from '../types';
 import { useStore } from '../store';
-import { MySQLQuery, DBGetTables, DBGetAllColumns } from '../../wailsjs/go/main/App';
+import { MySQLQuery, DBGetTables, DBGetAllColumns, MySQLGetDatabases, DBGetColumns } from '../../wailsjs/go/app/App';
+import DataGrid from './DataGrid';
 
 const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
   const [query, setQuery] = useState(tab.query || 'SELECT * FROM ');
+  
+  // DataGrid State
   const [results, setResults] = useState<any[]>([]);
-  const [columns, setColumns] = useState<any[]>([]);
+  const [columnNames, setColumnNames] = useState<string[]>([]);
+  const [pkColumns, setPkColumns] = useState<string[]>([]);
+  const [targetTableName, setTargetTableName] = useState<string | undefined>(undefined);
+  
   const [loading, setLoading] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [saveForm] = Form.useForm();
   
+  // Database Selection
+  const [currentConnectionId, setCurrentConnectionId] = useState<string>(tab.connectionId);
+  const [currentDb, setCurrentDb] = useState<string>(tab.dbName || '');
+  const [dbList, setDbList] = useState<string[]>([]);
+
   // Resizing state
   const [editorHeight, setEditorHeight] = useState(300);
   const editorRef = useRef<any>(null);
@@ -31,16 +42,44 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
 
   // If opening a saved query, load its SQL
   useEffect(() => {
-      if (tab.query) {
-          setQuery(tab.query);
-      }
+      if (tab.query) setQuery(tab.query);
   }, [tab.query]);
+
+  // Fetch Database List
+  useEffect(() => {
+      const fetchDbs = async () => {
+          const conn = connections.find(c => c.id === currentConnectionId);
+          if (!conn) return;
+          
+          const config = { 
+            ...conn.config, 
+            port: Number(conn.config.port),
+            password: conn.config.password || "",
+            database: conn.config.database || "",
+            useSSH: conn.config.useSSH || false,
+            ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
+          };
+
+          const res = await MySQLGetDatabases(config as any);
+          if (res.success && Array.isArray(res.data)) {
+              const dbs = res.data.map((row: any) => row.Database || row.database);
+              setDbList(dbs);
+              if (!currentDb) {
+                  if (conn.config.database) setCurrentDb(conn.config.database);
+                  else if (dbs.length > 0 && dbs[0] !== 'information_schema') setCurrentDb(dbs[0]);
+              }
+          } else {
+              setDbList([]);
+          }
+      };
+      fetchDbs();
+  }, [currentConnectionId, connections, currentDb]);
 
   // Fetch Metadata for Autocomplete
   useEffect(() => {
       const fetchMetadata = async () => {
-          const conn = connections.find(c => c.id === tab.connectionId);
-          if (!conn) return;
+          const conn = connections.find(c => c.id === currentConnectionId);
+          if (!conn || !currentDb) return;
 
           const config = { 
             ...conn.config, 
@@ -51,26 +90,25 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
             ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
           };
 
-          const dbName = tab.dbName || conn.config.database || "";
-
-          // Fetch Tables
-          const resTables = await DBGetTables(config as any, dbName);
+          const resTables = await DBGetTables(config as any, currentDb);
           if (resTables.success && Array.isArray(resTables.data)) {
-              // res.data is [{Table: "name"}, ...]
               const tableNames = resTables.data.map((row: any) => Object.values(row)[0] as string);
               tablesRef.current = tableNames;
+          } else {
+              tablesRef.current = [];
           }
 
-          // Fetch All Columns (Optimized for autocomplete)
           if (config.type === 'mysql' || !config.type) {
-              const resCols = await DBGetAllColumns(config as any, dbName);
+              const resCols = await DBGetAllColumns(config as any, currentDb);
               if (resCols.success && Array.isArray(resCols.data)) {
                   allColumnsRef.current = resCols.data;
+              } else {
+                  allColumnsRef.current = [];
               }
           }
       };
       fetchMetadata();
-  }, [tab.connectionId, tab.dbName, connections]);
+  }, [currentConnectionId, currentDb, connections]);
 
   // Handle Resizing
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -98,7 +136,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
       editorRef.current = editor;
       monacoRef.current = monaco;
 
-      // SQL Autocomplete
       monaco.languages.registerCompletionItemProvider('sql', {
           provideCompletionItems: (model: any, position: any) => {
               const word = model.getWordUntilPosition(position);
@@ -109,7 +146,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
                   endColumn: word.endColumn,
               };
 
-              // Simple Heuristic: Find tables mentioned in the query
               const tableRegex = /(?:FROM|JOIN|UPDATE|INTO)\s+[`"]?(\w+)[`"]?/gi;
               const foundTables = new Set<string>();
               let match;
@@ -118,7 +154,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
                   foundTables.add(match[1]);
               }
 
-              // Columns suggestion
               const relevantColumns = allColumnsRef.current
                   .filter(c => foundTables.has(c.tableName))
                   .map(c => ({
@@ -131,14 +166,12 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
                   }));
 
               const suggestions = [
-                  // Keywords
                   ...['SELECT', 'FROM', 'WHERE', 'LIMIT', 'INSERT', 'UPDATE', 'DELETE', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'ON', 'GROUP BY', 'ORDER BY', 'AS', 'AND', 'OR', 'NOT', 'NULL', 'IS', 'IN', 'VALUES', 'SET', 'CREATE', 'TABLE', 'DROP', 'ALTER', 'Add', 'MODIFY', 'CHANGE', 'COLUMN', 'KEY', 'PRIMARY', 'FOREIGN', 'REFERENCES', 'CONSTRAINT', 'DEFAULT', 'AUTO_INCREMENT', 'COMMENT', 'SHOW', 'DESCRIBE', 'EXPLAIN'].map(k => ({
                       label: k,
                       kind: monaco.languages.CompletionItemKind.Keyword,
                       insertText: k,
                       range
                   })),
-                  // Tables
                   ...tablesRef.current.map(t => ({
                       label: t,
                       kind: monaco.languages.CompletionItemKind.Class,
@@ -146,7 +179,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
                       detail: 'Table',
                       range
                   })),
-                  // Columns
                   ...relevantColumns
               ];
               return { suggestions };
@@ -180,8 +212,12 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
 
   const handleRun = async () => {
     if (!query.trim()) return;
+    if (!currentDb) {
+        message.error("请先选择数据库");
+        return;
+    }
     setLoading(true);
-    const conn = connections.find(c => c.id === tab.connectionId);
+    const conn = connections.find(c => c.id === currentConnectionId);
     if (!conn) {
         message.error("Connection not found");
         setLoading(false);
@@ -196,30 +232,42 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         useSSH: conn.config.useSSH || false,
         ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
     };
-    const res = await MySQLQuery(config as any, tab.dbName || conn.config.database || '', query);
+
+    // Detect Simple Table Query
+    let simpleTableName: string | undefined = undefined;
+    let primaryKeys: string[] = [];
+    
+    // Naive regex to detect SELECT * FROM table
+    const tableMatch = query.match(/^\s*SELECT\s+\*\s+FROM\s+[`"]?(\w+)[`"]?\s*(?:WHERE.*)?(?:ORDER BY.*)?(?:LIMIT.*)?$/i);
+    if (tableMatch) {
+        simpleTableName = tableMatch[1];
+        // Fetch PKs for editing
+        const resCols = await DBGetColumns(config as any, currentDb, simpleTableName);
+        if (resCols.success) {
+            primaryKeys = (resCols.data as ColumnDefinition[]).filter(c => c.key === 'PRI').map(c => c.name);
+        }
+    }
+    setTargetTableName(simpleTableName);
+    setPkColumns(primaryKeys);
+
+    const res = await MySQLQuery(config as any, currentDb, query);
 
     if (res.success) {
       if (Array.isArray(res.data)) {
         if (res.data.length > 0) {
-            const cols = Object.keys(res.data[0]).map(key => ({
-              title: key,
-              dataIndex: key,
-              key: key,
-              ellipsis: true,
-              render: (text: any) => typeof text === 'object' ? JSON.stringify(text) : String(text),
-            }));
-            setColumns(cols);
+            const cols = Object.keys(res.data[0]);
+            setColumnNames(cols);
             setResults(res.data.map((row: any, i: number) => ({ ...row, key: i })));
         } else {
             message.info('查询执行成功，但没有返回结果。');
             setResults([]);
-            setColumns([]);
+            setColumnNames([]);
         }
       } else {
-          // Handle update/insert results
           const affected = (res.data as any).affectedRows;
           message.success(`受影响行数: ${affected}`);
           setResults([]);
+          setColumnNames([]);
       }
     } else {
       message.error(res.message);
@@ -234,20 +282,38 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
               id: tab.id.startsWith('saved-') ? tab.id : `saved-${Date.now()}`,
               name: values.name,
               sql: query,
-              connectionId: tab.connectionId,
-              dbName: tab.dbName || '',
+              connectionId: currentConnectionId,
+              dbName: currentDb || tab.dbName || '',
               createdAt: Date.now()
           });
           message.success('查询已保存！');
           setIsSaveModalOpen(false);
       } catch (e) {
-          // validation failed
       }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: '8px', flexShrink: 0 }}>
+      <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
+        <Select 
+            style={{ width: 150 }} 
+            placeholder="选择连接"
+            value={currentConnectionId}
+            onChange={(val) => {
+                setCurrentConnectionId(val);
+                setCurrentDb('');
+            }}
+            options={connections.map(c => ({ label: c.name, value: c.id }))}
+            showSearch
+        />
+        <Select 
+            style={{ width: 200 }} 
+            placeholder="选择数据库"
+            value={currentDb}
+            onChange={setCurrentDb}
+            options={dbList.map(db => ({ label: db, value: db }))}
+            showSearch
+        />
         <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleRun} loading={loading}>
           运行
         </Button>
@@ -268,7 +334,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         </Button.Group>
       </div>
       
-      {/* Editor Area - Resizable */}
       <div style={{ height: editorHeight, minHeight: '100px', borderBottom: '1px solid #eee' }}>
         <Editor 
           height="100%" 
@@ -286,7 +351,6 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         />
       </div>
 
-      {/* Resize Handle */}
       <div 
         onMouseDown={handleMouseDown}
         style={{ 
@@ -299,16 +363,17 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         title="拖动调整高度"
       />
 
-      {/* Results Area - Fills remaining space */}
-      <div style={{ flex: 1, overflow: 'hidden', padding: 10, display: 'flex', flexDirection: 'column' }}>
-         <Table 
-            dataSource={results} 
-            columns={columns} 
-            size="small" 
-            scroll={{ x: 'max-content', y: 'calc(100% - 40px)' }} 
+      <div style={{ flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
+         <DataGrid
+            data={results}
+            columnNames={columnNames}
             loading={loading}
-            pagination={false}
-            style={{ flex: 1, overflow: 'hidden' }}
+            tableName={targetTableName} // Pass table name only if detection succeeded
+            dbName={currentDb}
+            connectionId={currentConnectionId}
+            pkColumns={pkColumns}
+            onReload={handleRun}
+            readOnly={!targetTableName} // Read-only if not a simple table query
          />
       </div>
 

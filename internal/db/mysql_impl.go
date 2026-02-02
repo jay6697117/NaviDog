@@ -1,10 +1,14 @@
-package main
+package db
 
 import (
 	"database/sql"
 	"fmt"
 	"strings"
 	"time"
+
+	"GoNavi-Wails/internal/connection"
+	"GoNavi-Wails/internal/ssh"
+	"GoNavi-Wails/internal/utils"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -13,15 +17,13 @@ type MySQLDB struct {
 	conn *sql.DB
 }
 
-func (m *MySQLDB) getDSN(config ConnectionConfig) string {
+func (m *MySQLDB) getDSN(config connection.ConnectionConfig) string {
 	database := config.Database
 	protocol := "tcp"
 	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
 
-	// Reuse SSH logic from app.go/ssh.go if available globally or duplicate logic
-	// For now assuming RegisterSSHNetwork is global
 	if config.UseSSH {
-		netName, err := RegisterSSHNetwork(config.SSH)
+		netName, err := ssh.RegisterSSHNetwork(config.SSH)
 		if err == nil {
 			protocol = netName
 			address = fmt.Sprintf("%s:%d", config.Host, config.Port)
@@ -32,7 +34,7 @@ func (m *MySQLDB) getDSN(config ConnectionConfig) string {
 		config.User, config.Password, protocol, address, database)
 }
 
-func (m *MySQLDB) Connect(config ConnectionConfig) error {
+func (m *MySQLDB) Connect(config connection.ConnectionConfig) error {
 	dsn := m.getDSN(config)
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -53,7 +55,7 @@ func (m *MySQLDB) Ping() error {
 	if m.conn == nil {
 		return fmt.Errorf("connection not open")
 	}
-	ctx, cancel := contextWithTimeout(5 * time.Second)
+	ctx, cancel := utils.ContextWithTimeout(5 * time.Second)
 	defer cancel()
 	return m.conn.PingContext(ctx)
 }
@@ -133,8 +135,6 @@ func (m *MySQLDB) GetDatabases() ([]string, error) {
 }
 
 func (m *MySQLDB) GetTables(dbName string) ([]string, error) {
-	// MySQL connection is usually bound to a DB, but we might need to query another DB or just SHOW TABLES
-	// If current conn is bound to dbName, fine. If not, SHOW TABLES FROM dbName
 	query := "SHOW TABLES"
 	if dbName != "" {
 		query = fmt.Sprintf("SHOW TABLES FROM `%s`", dbName)
@@ -147,10 +147,9 @@ func (m *MySQLDB) GetTables(dbName string) ([]string, error) {
 	
 	var tables []string
 	for _, row := range data {
-		// The column name is usually "Tables_in_dbname"
 		for _, v := range row {
 			tables = append(tables, fmt.Sprintf("%v", v))
-			break // Only first column
+			break
 		}
 	}
 	return tables, nil
@@ -158,7 +157,6 @@ func (m *MySQLDB) GetTables(dbName string) ([]string, error) {
 
 func (m *MySQLDB) GetCreateStatement(dbName, tableName string) (string, error) {
 	query := fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", dbName, tableName)
-	// If dbName is already selected or empty, just table name
 	if dbName == "" {
 		query = fmt.Sprintf("SHOW CREATE TABLE `%s`", tableName)
 	}
@@ -176,7 +174,7 @@ func (m *MySQLDB) GetCreateStatement(dbName, tableName string) (string, error) {
 	return "", fmt.Errorf("create statement not found")
 }
 
-func (m *MySQLDB) GetColumns(dbName, tableName string) ([]ColumnDefinition, error) {
+func (m *MySQLDB) GetColumns(dbName, tableName string) ([]connection.ColumnDefinition, error) {
 	query := fmt.Sprintf("SHOW FULL COLUMNS FROM `%s`.`%s`", dbName, tableName)
 	if dbName == "" {
 		query = fmt.Sprintf("SHOW FULL COLUMNS FROM `%s`", tableName)
@@ -187,9 +185,9 @@ func (m *MySQLDB) GetColumns(dbName, tableName string) ([]ColumnDefinition, erro
 		return nil, err
 	}
 
-	var columns []ColumnDefinition
+	var columns []connection.ColumnDefinition
 	for _, row := range data {
-		col := ColumnDefinition{
+		col := connection.ColumnDefinition{
 			Name:     fmt.Sprintf("%v", row["Field"]),
 			Type:     fmt.Sprintf("%v", row["Type"]),
 			Nullable: fmt.Sprintf("%v", row["Null"]),
@@ -208,7 +206,7 @@ func (m *MySQLDB) GetColumns(dbName, tableName string) ([]ColumnDefinition, erro
 	return columns, nil
 }
 
-func (m *MySQLDB) GetIndexes(dbName, tableName string) ([]IndexDefinition, error) {
+func (m *MySQLDB) GetIndexes(dbName, tableName string) ([]connection.IndexDefinition, error) {
 	query := fmt.Sprintf("SHOW INDEX FROM `%s`.`%s`", dbName, tableName)
 	if dbName == "" {
 		query = fmt.Sprintf("SHOW INDEX FROM `%s`", tableName)
@@ -219,12 +217,10 @@ func (m *MySQLDB) GetIndexes(dbName, tableName string) ([]IndexDefinition, error
 		return nil, err
 	}
 
-	var indexes []IndexDefinition
+	var indexes []connection.IndexDefinition
 	for _, row := range data {
-		// Need to handle types carefully. Non_unique is int usually.
 		nonUnique := 0
 		if val, ok := row["Non_unique"]; ok {
-            // Handle various number types (json decoding might be float64)
 			if f, ok := val.(float64); ok {
 				nonUnique = int(f)
 			} else if i, ok := val.(int64); ok {
@@ -241,7 +237,7 @@ func (m *MySQLDB) GetIndexes(dbName, tableName string) ([]IndexDefinition, error
 			}
         }
 
-		idx := IndexDefinition{
+		idx := connection.IndexDefinition{
 			Name:       fmt.Sprintf("%v", row["Key_name"]),
 			ColumnName: fmt.Sprintf("%v", row["Column_name"]),
 			NonUnique:  nonUnique,
@@ -253,7 +249,7 @@ func (m *MySQLDB) GetIndexes(dbName, tableName string) ([]IndexDefinition, error
 	return indexes, nil
 }
 
-func (m *MySQLDB) GetForeignKeys(dbName, tableName string) ([]ForeignKeyDefinition, error) {
+func (m *MySQLDB) GetForeignKeys(dbName, tableName string) ([]connection.ForeignKeyDefinition, error) {
 	query := fmt.Sprintf(`SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME 
               FROM information_schema.KEY_COLUMN_USAGE 
               WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s' AND REFERENCED_TABLE_NAME IS NOT NULL`, dbName, tableName)
@@ -263,9 +259,9 @@ func (m *MySQLDB) GetForeignKeys(dbName, tableName string) ([]ForeignKeyDefiniti
 		return nil, err
 	}
 
-	var fks []ForeignKeyDefinition
+	var fks []connection.ForeignKeyDefinition
 	for _, row := range data {
-		fk := ForeignKeyDefinition{
+		fk := connection.ForeignKeyDefinition{
 			Name:           fmt.Sprintf("%v", row["CONSTRAINT_NAME"]),
 			ColumnName:     fmt.Sprintf("%v", row["COLUMN_NAME"]),
 			RefTableName:   fmt.Sprintf("%v", row["REFERENCED_TABLE_NAME"]),
@@ -277,16 +273,16 @@ func (m *MySQLDB) GetForeignKeys(dbName, tableName string) ([]ForeignKeyDefiniti
 	return fks, nil
 }
 
-func (m *MySQLDB) GetTriggers(dbName, tableName string) ([]TriggerDefinition, error) {
+func (m *MySQLDB) GetTriggers(dbName, tableName string) ([]connection.TriggerDefinition, error) {
 	query := fmt.Sprintf("SHOW TRIGGERS FROM `%s` WHERE `Table` = '%s'", dbName, tableName)
 	data, _, err := m.Query(query)
 	if err != nil {
 		return nil, err
 	}
 
-	var triggers []TriggerDefinition
+	var triggers []connection.TriggerDefinition
 	for _, row := range data {
-		trig := TriggerDefinition{
+		trig := connection.TriggerDefinition{
 			Name:      fmt.Sprintf("%v", row["Trigger"]),
 			Timing:    fmt.Sprintf("%v", row["Timing"]),
 			Event:     fmt.Sprintf("%v", row["Event"]),
@@ -297,7 +293,7 @@ func (m *MySQLDB) GetTriggers(dbName, tableName string) ([]TriggerDefinition, er
 	return triggers, nil
 }
 
-func (m *MySQLDB) ApplyChanges(tableName string, changes ChangeSet) error {
+func (m *MySQLDB) ApplyChanges(tableName string, changes connection.ChangeSet) error {
 	if m.conn == nil {
 		return fmt.Errorf("connection not open")
 	}
@@ -306,11 +302,10 @@ func (m *MySQLDB) ApplyChanges(tableName string, changes ChangeSet) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback() // Rollback if not committed
+	defer tx.Rollback()
 
 	// 1. Deletes
 	for _, pk := range changes.Deletes {
-		// Build WHERE clause from PK
 		var wheres []string
 		var args []interface{}
 		for k, v := range pk {
@@ -318,7 +313,7 @@ func (m *MySQLDB) ApplyChanges(tableName string, changes ChangeSet) error {
 			args = append(args, v)
 		}
 		if len(wheres) == 0 {
-			continue // Safety
+			continue
 		}
 		query := fmt.Sprintf("DELETE FROM `%s` WHERE %s", tableName, strings.Join(wheres, " AND "))
 		if _, err := tx.Exec(query, args...); err != nil {
@@ -347,7 +342,7 @@ func (m *MySQLDB) ApplyChanges(tableName string, changes ChangeSet) error {
 		}
 		
 		if len(wheres) == 0 {
-			return fmt.Errorf("update requires keys") // Safety
+			return fmt.Errorf("update requires keys")
 		}
 
 		query := fmt.Sprintf("UPDATE `%s` SET %s WHERE %s", tableName, strings.Join(sets, ", "), strings.Join(wheres, " AND "))
@@ -381,13 +376,9 @@ func (m *MySQLDB) ApplyChanges(tableName string, changes ChangeSet) error {
 	return tx.Commit()
 }
 
-func (m *MySQLDB) GetAllColumns(dbName string) ([]ColumnDefinitionWithTable, error) {
+func (m *MySQLDB) GetAllColumns(dbName string) ([]connection.ColumnDefinitionWithTable, error) {
 	query := fmt.Sprintf("SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '%s'", dbName)
 	if dbName == "" {
-		// If dbName is empty, we might need to use the current DB from connection? 
-		// But information_schema requires a schema filter usually or it returns all.
-		// Let's assume dbName is provided or we try to get it.
-		// For MVP, if empty, we return empty or try "SELECT DATABASE()".
 		return nil, fmt.Errorf("database name required for GetAllColumns")
 	}
 
@@ -396,9 +387,9 @@ func (m *MySQLDB) GetAllColumns(dbName string) ([]ColumnDefinitionWithTable, err
 		return nil, err
 	}
 
-	var cols []ColumnDefinitionWithTable
+	var cols []connection.ColumnDefinitionWithTable
 	for _, row := range data {
-		col := ColumnDefinitionWithTable{
+		col := connection.ColumnDefinitionWithTable{
 			TableName: fmt.Sprintf("%v", row["TABLE_NAME"]),
 			Name:      fmt.Sprintf("%v", row["COLUMN_NAME"]),
 			Type:      fmt.Sprintf("%v", row["COLUMN_TYPE"]),

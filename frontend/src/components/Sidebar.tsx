@@ -24,7 +24,7 @@ import {
 } from '@ant-design/icons';
 import { useStore } from '../store';
 import { SavedConnection } from '../types';
-import { MySQLGetDatabases, MySQLGetTables, MySQLShowCreateTable, ExportTable, OpenSQLFile, CreateDatabase } from '../../wailsjs/go/main/App';
+import { MySQLGetDatabases, MySQLGetTables, MySQLShowCreateTable, ExportTable, OpenSQLFile, CreateDatabase } from '../../wailsjs/go/app/App';
 
 const { Search } = Input;
 
@@ -39,7 +39,7 @@ interface TreeNode {
 }
 
 const Sidebar: React.FC = () => {
-  const { connections, savedQueries, addTab } = useStore();
+  const { connections, savedQueries, addTab, setActiveContext } = useStore();
   const [treeData, setTreeData] = useState<TreeNode[]>([]);
   const [searchValue, setSearchValue] = useState('');
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
@@ -49,6 +49,27 @@ const Sidebar: React.FC = () => {
   const [isCreateDbModalOpen, setIsCreateDbModalOpen] = useState(false);
   const [createDbForm] = Form.useForm();
   const [targetConnection, setTargetConnection] = useState<any>(null);
+
+  useEffect(() => {
+      // Refresh queries for expanded databases
+      const findNode = (nodes: TreeNode[], k: React.Key): TreeNode | null => {
+          for (const node of nodes) {
+              if (node.key === k) return node;
+              if (node.children) {
+                  const res = findNode(node.children, k);
+                  if (res) return res;
+              }
+          }
+          return null;
+      };
+
+      expandedKeys.forEach(key => {
+          const node = findNode(treeData, key);
+          if (node && node.type === 'database') {
+              loadTables(node);
+          }
+      });
+  }, [savedQueries]);
 
   useEffect(() => {
     setTreeData(connections.map(conn => ({
@@ -230,9 +251,24 @@ const Sidebar: React.FC = () => {
   };
 
   const onSelect = (keys: React.Key[], info: any) => {
-      if (!info.node.selected) return; 
+      if (!info.node.selected) {
+          setActiveContext(null);
+          return;
+      }
       
-      const { type, dataRef } = info.node;
+      const { type, dataRef, key, title } = info.node;
+      
+      // Update active context
+      if (type === 'connection') {
+          setActiveContext({ connectionId: key, dbName: '' });
+      } else if (type === 'database') {
+          setActiveContext({ connectionId: dataRef.id, dbName: title });
+      } else if (type === 'table') {
+          setActiveContext({ connectionId: dataRef.id, dbName: dataRef.dbName });
+      } else if (type === 'saved-query') {
+          setActiveContext({ connectionId: dataRef.connectionId, dbName: dataRef.dbName });
+      }
+
       if (type === 'folder-columns') openDesign(info.node, 'columns', true);
       else if (type === 'folder-indexes') openDesign(info.node, 'indexes', true);
       else if (type === 'folder-fks') openDesign(info.node, 'foreignKeys', true);
@@ -315,7 +351,7 @@ const Sidebar: React.FC = () => {
   };
 
   const handleRunSQLFile = async (node: any) => {
-      const res = await (window as any).go.main.App.OpenSQLFile();
+      const res = await (window as any).go.app.App.OpenSQLFile();
       if (res.success) {
           const sqlContent = res.data;
           const { dbName, id } = node.dataRef;

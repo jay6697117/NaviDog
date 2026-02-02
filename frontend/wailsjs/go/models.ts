@@ -1,4 +1,4 @@
-export namespace main {
+export namespace connection {
 	
 	export class UpdateRow {
 	    keys: Record<string, any>;

@@ -6,6 +6,7 @@ interface AppState {
   connections: SavedConnection[];
   tabs: TabData[];
   activeTabId: string | null;
+  activeContext: { connectionId: string; dbName: string } | null;
   savedQueries: SavedQuery[];
   darkMode: boolean;
   sqlFormatOptions: { keywordCase: 'upper' | 'lower' };
@@ -16,6 +17,7 @@ interface AppState {
   addTab: (tab: TabData) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
+  setActiveContext: (context: { connectionId: string; dbName: string } | null) => void;
 
   saveQuery: (query: SavedQuery) => void;
   deleteQuery: (id: string) => void;
@@ -30,6 +32,7 @@ export const useStore = create<AppState>()(
       connections: [],
       tabs: [],
       activeTabId: null,
+      activeContext: null,
       savedQueries: [],
       darkMode: false,
       sqlFormatOptions: { keywordCase: 'upper' },
@@ -58,6 +61,7 @@ export const useStore = create<AppState>()(
       }),
       
       setActiveTab: (id) => set({ activeTabId: id }),
+      setActiveContext: (context) => set({ activeContext: context }),
 
       saveQuery: (query) => set((state) => {
         // If query with same ID exists, update it

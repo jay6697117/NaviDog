@@ -7,7 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Resizable } from 'react-resizable';
 import { TabData, ColumnDefinition, IndexDefinition, ForeignKeyDefinition, TriggerDefinition } from '../types';
 import { useStore } from '../store';
-import { DBGetColumns, DBGetIndexes, MySQLQuery, DBGetForeignKeys, DBGetTriggers, DBShowCreateTable } from '../../wailsjs/go/main/App';
+import { DBGetColumns, DBGetIndexes, MySQLQuery, DBGetForeignKeys, DBGetTriggers, DBShowCreateTable } from '../../wailsjs/go/app/App';
 
 // Need styles for react-resizable
 import 'react-resizable/css/styles.css';
@@ -74,6 +74,11 @@ const ResizableTitle = (props: any) => {
           className="react-resizable-handle"
           onClick={(e) => {
             e.stopPropagation();
+            e.preventDefault();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault(); // Prevent text selection and focus hijacking
           }}
           style={{
               position: 'absolute',
@@ -87,7 +92,7 @@ const ResizableTitle = (props: any) => {
         />
       }
       onResize={onResize}
-      draggableOpts={{ enableUserSelectHack: false }}
+      draggableOpts={{ enableUserSelectHack: true }}
     >
       <th {...restProps} style={{ ...restProps.style, position: 'relative' }} />
     </Resizable>
@@ -263,16 +268,24 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
       setTableColumns(initialCols);
   }, [readOnly]); // Re-create if readOnly changes
 
+  const rafRef = React.useRef<number | null>(null);
+
   // Resize Handler
   const handleResize = (index: number) => (_: React.SyntheticEvent, { size }: { size: { width: number } }) => {
-    setTableColumns((columns) => {
-      const nextColumns = [...columns];
-      nextColumns[index] = {
-        ...nextColumns[index],
-        width: size.width,
-      };
-      return nextColumns;
-    });
+      if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = requestAnimationFrame(() => {
+        setTableColumns((columns) => {
+            const nextColumns = [...columns];
+            nextColumns[index] = {
+                ...nextColumns[index],
+                width: size.width,
+            };
+            return nextColumns;
+        });
+        rafRef.current = null;
+      });
   };
 
   const fetchData = async () => {
@@ -587,8 +600,8 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
             )}
             {!readOnly && <Button icon={<SaveOutlined />} type="primary" onClick={generateDDL}>保存</Button>}
             {!isNewTable && <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>}
-            <div style={{ flex: 1 }} />
             {!readOnly && <Button icon={<PlusOutlined />} onClick={handleAddColumn}>添加字段</Button>}
+            <div style={{ flex: 1 }} />
         </div>
         <Tabs 
             activeKey={activeKey}
