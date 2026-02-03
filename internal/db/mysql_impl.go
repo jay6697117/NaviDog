@@ -30,8 +30,13 @@ func (m *MySQLDB) getDSN(config connection.ConnectionConfig) string {
 		}
 	}
 
-	return fmt.Sprintf("%s:%s@%s(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		config.User, config.Password, protocol, address, database)
+	timeout := config.Timeout
+	if timeout <= 0 {
+		timeout = 30
+	}
+
+	return fmt.Sprintf("%s:%s@%s(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=%ds",
+		config.User, config.Password, protocol, address, database, timeout)
 }
 
 func (m *MySQLDB) Connect(config connection.ConnectionConfig) error {
