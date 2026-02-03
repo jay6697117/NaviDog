@@ -11,5 +11,10 @@ export default defineConfig({
   build: {
     outDir: 'dist', // Standard Wails output directory
     emptyOutDir: true,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setupTests.ts'
   }
 })
