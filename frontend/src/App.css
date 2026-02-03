@@ -5,6 +5,11 @@ html, body, #root {
   overflow: hidden; /* Disable global scrollbar */
 }
 
+#root {
+  background: var(--color-bg-layout);
+  color: var(--color-text-primary);
+}
+
 /* 侧边栏 Tree 样式优化 */
 .ant-tree .ant-tree-treenode {
   width: 100%;

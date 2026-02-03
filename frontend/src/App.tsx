@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, ConfigProvider, theme, Dropdown, MenuProps, message } from 'antd';
+import { Layout, Button, ConfigProvider, Dropdown, MenuProps, message } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { PlusOutlined, BulbOutlined, BulbFilled, ConsoleSqlOutlined, BugOutlined, SettingOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons';
 import Sidebar from './components/Sidebar';
@@ -9,7 +9,9 @@ import DataSyncModal from './components/DataSyncModal';
 import LogPanel from './components/LogPanel';
 import { useStore } from './store';
 import { SavedConnection } from './types';
+import { getAntdTheme } from './theme';
 import './App.css';
+import './theme.css';
 
 const { Sider, Content } = Layout;
 
@@ -214,28 +216,20 @@ function App() {
   };
 
   useEffect(() => {
-    if (darkMode) {
-        document.body.style.backgroundColor = '#141414';
-        document.body.style.color = '#ffffff';
-    } else {
-        document.body.style.backgroundColor = '#ffffff';
-        document.body.style.color = '#000000';
-    }
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
   }, [darkMode]);
 
   return (
     <ConfigProvider
         locale={zhCN}
-        theme={{
-            algorithm: darkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        }}
+        theme={getAntdTheme(darkMode)}
     >
-        <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+        <Layout className="app-shell">
           <Sider 
             theme={darkMode ? "dark" : "light"} 
             width={sidebarWidth} 
+            className="app-sider"
             style={{ 
-                borderRight: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', 
                 position: 'relative'
             }}
           >
@@ -285,7 +279,7 @@ function App() {
                 title="拖动调整宽度"
             />
           </Sider>
-           <Content style={{ background: darkMode ? '#141414' : '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+           <Content className="app-content">
              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                  <TabManager />
              </div>
