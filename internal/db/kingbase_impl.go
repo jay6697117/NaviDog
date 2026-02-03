@@ -150,19 +150,7 @@ func (k *KingbaseDB) Query(query string) ([]map[string]interface{}, []string, er
 
 		entry := make(map[string]interface{})
 		for i, col := range columns {
-			var v interface{}
-			val := values[i]
-			b, ok := val.([]byte)
-			if ok {
-				if b == nil {
-					v = nil
-				} else {
-					v = string(b)
-				}
-			} else {
-				v = val
-			}
-			entry[col] = v
+			entry[col] = normalizeQueryValue(values[i])
 		}
 		resultData = append(resultData, entry)
 	}
@@ -392,14 +380,13 @@ func (k *KingbaseDB) ApplyChanges(tableName string, changes connection.ChangeSet
 }
 
 func (k *KingbaseDB) GetAllColumns(dbName string) ([]connection.ColumnDefinitionWithTable, error) {
-	schema := "public"
-	if dbName != "" {
-		schema = dbName
-	}
-
-	query := fmt.Sprintf(`SELECT table_name, column_name, data_type 
-		FROM information_schema.columns 
-		WHERE table_schema = '%s'`, schema)
+	// dbName 在本项目语义里是“数据库”，schema 由 table_schema 决定；这里返回全部用户 schema 的列用于查询提示。
+	query := `
+		SELECT table_schema, table_name, column_name, data_type
+		FROM information_schema.columns
+		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+		  AND table_schema NOT LIKE 'pg_%'
+		ORDER BY table_schema, table_name, ordinal_position`
 
 	data, _, err := k.Query(query)
 	if err != nil {
@@ -408,8 +395,14 @@ func (k *KingbaseDB) GetAllColumns(dbName string) ([]connection.ColumnDefinition
 
 	var cols []connection.ColumnDefinitionWithTable
 	for _, row := range data {
+		schema := fmt.Sprintf("%v", row["table_schema"])
+		table := fmt.Sprintf("%v", row["table_name"])
+		tableName := table
+		if strings.TrimSpace(schema) != "" {
+			tableName = fmt.Sprintf("%s.%s", schema, table)
+		}
 		col := connection.ColumnDefinitionWithTable{
-			TableName: fmt.Sprintf("%v", row["table_name"]),
+			TableName: tableName,
 			Name:      fmt.Sprintf("%v", row["column_name"]),
 			Type:      fmt.Sprintf("%v", row["data_type"]),
 		}

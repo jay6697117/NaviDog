@@ -550,7 +550,6 @@ const TableDesigner: React.FC<{ tab: TabData }> = ({ tab }) => {
       <div ref={containerRef} className="table-designer-wrapper" style={{ height: '100%', overflow: 'hidden', position: 'relative' }}>
         <style>{`
            .table-designer-wrapper .ant-table-body {
-               height: ${tableHeight}px !important;
                max-height: ${tableHeight}px !important;
            }
         `}</style>

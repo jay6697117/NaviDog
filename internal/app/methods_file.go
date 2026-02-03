@@ -1,11 +1,16 @@
 package app
 
 import (
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"GoNavi-Wails/internal/connection"
 	"GoNavi-Wails/internal/db"
@@ -213,10 +218,34 @@ func (a *App) ExportTable(config connection.ConnectionConfig, dbName string, tab
 	}
 
 	runConfig := normalizeRunConfig(config, dbName)
-	
+
 dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	format = strings.ToLower(format)
+	if format == "sql" {
+		f, err := os.Create(filename)
+		if err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+		defer f.Close()
+
+		w := bufio.NewWriterSize(f, 1024*1024)
+		defer w.Flush()
+
+		if err := writeSQLHeader(w, runConfig, dbName); err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+		if err := dumpTableSQL(w, dbInst, runConfig, dbName, tableName, true); err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+		if err := writeSQLFooter(w, runConfig); err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+
+		return connection.QueryResult{Success: true, Message: "Export successful"}
 	}
 
 	query := fmt.Sprintf("SELECT * FROM %s", quoteQualifiedIdentByType(runConfig.Type, tableName))
@@ -232,7 +261,6 @@ data, columns, err := dbInst.Query(query)
 	}
 	defer f.Close()
 
-	format = strings.ToLower(format)
 	var csvWriter *csv.Writer
 	var jsonEncoder *json.Encoder
 	var isJsonFirstRow = true
@@ -301,6 +329,127 @@ data, columns, err := dbInst.Query(query)
 	return connection.QueryResult{Success: true, Message: "Export successful"}
 }
 
+func (a *App) ExportTablesSQL(config connection.ConnectionConfig, dbName string, tableNames []string, includeData bool) connection.QueryResult {
+	safeDbName := strings.TrimSpace(dbName)
+	if safeDbName == "" {
+		safeDbName = "export"
+	}
+	suffix := "schema"
+	if includeData {
+		suffix = "backup"
+	}
+	defaultFilename := fmt.Sprintf("%s_%s_%dtables.sql", safeDbName, suffix, len(tableNames))
+	if len(tableNames) == 1 && strings.TrimSpace(tableNames[0]) != "" {
+		defaultFilename = fmt.Sprintf("%s_%s.sql", strings.TrimSpace(tableNames[0]), suffix)
+	}
+
+	filename, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Export Tables (SQL)",
+		DefaultFilename: defaultFilename,
+	})
+	if err != nil || filename == "" {
+		return connection.QueryResult{Success: false, Message: "Cancelled"}
+	}
+
+	runConfig := normalizeRunConfig(config, dbName)
+	dbInst, err := a.getDatabase(runConfig)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	tables := make([]string, 0, len(tableNames))
+	seen := make(map[string]struct{}, len(tableNames))
+	for _, t := range tableNames {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		tables = append(tables, t)
+	}
+	sort.Strings(tables)
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	defer f.Close()
+
+	w := bufio.NewWriterSize(f, 1024*1024)
+	defer w.Flush()
+
+	if err := writeSQLHeader(w, runConfig, dbName); err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	for _, t := range tables {
+		if err := dumpTableSQL(w, dbInst, runConfig, dbName, t, includeData); err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+	}
+	if err := writeSQLFooter(w, runConfig); err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	return connection.QueryResult{Success: true, Message: "Export successful"}
+}
+
+func (a *App) ExportDatabaseSQL(config connection.ConnectionConfig, dbName string, includeData bool) connection.QueryResult {
+	safeDbName := strings.TrimSpace(dbName)
+	if safeDbName == "" {
+		return connection.QueryResult{Success: false, Message: "dbName required"}
+	}
+	suffix := "schema"
+	if includeData {
+		suffix = "backup"
+	}
+
+	filename, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           fmt.Sprintf("Export %s (SQL)", safeDbName),
+		DefaultFilename: fmt.Sprintf("%s_%s.sql", safeDbName, suffix),
+	})
+	if err != nil || filename == "" {
+		return connection.QueryResult{Success: false, Message: "Cancelled"}
+	}
+
+	runConfig := normalizeRunConfig(config, dbName)
+	dbInst, err := a.getDatabase(runConfig)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	tables, err := dbInst.GetTables(dbName)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	sort.Strings(tables)
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	defer f.Close()
+
+	w := bufio.NewWriterSize(f, 1024*1024)
+	defer w.Flush()
+
+	if err := writeSQLHeader(w, runConfig, dbName); err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+	for _, t := range tables {
+		if err := dumpTableSQL(w, dbInst, runConfig, dbName, t, includeData); err != nil {
+			return connection.QueryResult{Success: false, Message: err.Error()}
+		}
+	}
+	if err := writeSQLFooter(w, runConfig); err != nil {
+		return connection.QueryResult{Success: false, Message: err.Error()}
+	}
+
+	return connection.QueryResult{Success: true, Message: "Export successful"}
+}
+
 func quoteIdentByType(dbType string, ident string) string {
 	if ident == "" {
 		return ident
@@ -338,6 +487,173 @@ func quoteQualifiedIdentByType(dbType string, ident string) string {
 		return quoteIdentByType(dbType, raw)
 	}
 	return strings.Join(quotedParts, ".")
+}
+
+func writeSQLHeader(w *bufio.Writer, config connection.ConnectionConfig, dbName string) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	if _, err := w.WriteString(fmt.Sprintf("-- GoNavi SQL Export\n-- Time: %s\n", now)); err != nil {
+		return err
+	}
+	if strings.TrimSpace(dbName) != "" {
+		if _, err := w.WriteString(fmt.Sprintf("-- Database: %s\n\n", dbName)); err != nil {
+			return err
+		}
+	}
+
+	if strings.ToLower(strings.TrimSpace(config.Type)) == "mysql" && strings.TrimSpace(dbName) != "" {
+		if _, err := w.WriteString(fmt.Sprintf("USE %s;\n\n", quoteIdentByType("mysql", dbName))); err != nil {
+			return err
+		}
+		if _, err := w.WriteString("SET FOREIGN_KEY_CHECKS=0;\n\n"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func writeSQLFooter(w *bufio.Writer, config connection.ConnectionConfig) error {
+	if strings.ToLower(strings.TrimSpace(config.Type)) == "mysql" {
+		if _, err := w.WriteString("\nSET FOREIGN_KEY_CHECKS=1;\n"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func qualifyTable(schemaName, tableName string) string {
+	schemaName = strings.TrimSpace(schemaName)
+	tableName = strings.TrimSpace(tableName)
+	if schemaName == "" {
+		return tableName
+	}
+	return schemaName + "." + tableName
+}
+
+func ensureSQLTerminator(sql string) string {
+	trimmed := strings.TrimSpace(sql)
+	if trimmed == "" {
+		return sql
+	}
+	if strings.HasSuffix(trimmed, ";") {
+		return sql
+	}
+	return sql + ";"
+}
+
+func isMySQLHexLiteral(s string) bool {
+	if len(s) < 3 || !(strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X")) {
+		return false
+	}
+	for i := 2; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func formatSQLValue(dbType string, v interface{}) string {
+	if v == nil {
+		return "NULL"
+	}
+
+	switch val := v.(type) {
+	case bool:
+		if val {
+			return "1"
+		}
+		return "0"
+	case int:
+		return strconv.Itoa(val)
+	case int8, int16, int32, int64:
+		return fmt.Sprintf("%d", val)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", val)
+	case float32:
+		f := float64(val)
+		if math.IsNaN(f) || math.IsInf(f, 0) {
+			return "NULL"
+		}
+		return strconv.FormatFloat(f, 'f', -1, 32)
+	case float64:
+		if math.IsNaN(val) || math.IsInf(val, 0) {
+			return "NULL"
+		}
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case time.Time:
+		return "'" + val.Format("2006-01-02 15:04:05") + "'"
+	case string:
+		if strings.ToLower(strings.TrimSpace(dbType)) == "mysql" && isMySQLHexLiteral(val) {
+			return val
+		}
+		escaped := strings.ReplaceAll(val, "'", "''")
+		return "'" + escaped + "'"
+	default:
+		escaped := strings.ReplaceAll(fmt.Sprintf("%v", v), "'", "''")
+		return "'" + escaped + "'"
+	}
+}
+
+func dumpTableSQL(w *bufio.Writer, dbInst db.Database, config connection.ConnectionConfig, dbName, tableName string, includeData bool) error {
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+
+	if _, err := w.WriteString("\n-- ----------------------------\n"); err != nil {
+		return err
+	}
+	if _, err := w.WriteString(fmt.Sprintf("-- Table: %s\n", qualifyTable(schemaName, pureTableName))); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("-- ----------------------------\n\n"); err != nil {
+		return err
+	}
+
+	createSQL, err := dbInst.GetCreateStatement(schemaName, pureTableName)
+	if err != nil {
+		return err
+	}
+	if _, err := w.WriteString(ensureSQLTerminator(createSQL)); err != nil {
+		return err
+	}
+	if _, err := w.WriteString("\n\n"); err != nil {
+		return err
+	}
+
+	if !includeData {
+		return nil
+	}
+
+	qualified := qualifyTable(schemaName, pureTableName)
+	selectSQL := fmt.Sprintf("SELECT * FROM %s", quoteQualifiedIdentByType(config.Type, qualified))
+	data, columns, err := dbInst.Query(selectSQL)
+	if err != nil {
+		return err
+	}
+	if len(data) == 0 {
+		if _, err := w.WriteString("-- (0 rows)\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	quotedCols := make([]string, 0, len(columns))
+	for _, c := range columns {
+		quotedCols = append(quotedCols, quoteIdentByType(config.Type, c))
+	}
+	quotedTable := quoteQualifiedIdentByType(config.Type, qualified)
+
+	for _, row := range data {
+		values := make([]string, 0, len(columns))
+		for _, c := range columns {
+			values = append(values, formatSQLValue(config.Type, row[c]))
+		}
+		if _, err := w.WriteString(fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);\n", quotedTable, strings.Join(quotedCols, ", "), strings.Join(values, ", "))); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ExportData exports provided data to a file

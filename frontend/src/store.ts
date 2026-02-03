@@ -29,6 +29,10 @@ interface AppState {
   
   addTab: (tab: TabData) => void;
   closeTab: (id: string) => void;
+  closeOtherTabs: (id: string) => void;
+  closeTabsToLeft: (id: string) => void;
+  closeTabsToRight: (id: string) => void;
+  closeAllTabs: () => void;
   setActiveTab: (id: string) => void;
   setActiveContext: (context: { connectionId: string; dbName: string } | null) => void;
 
@@ -79,6 +83,30 @@ export const useStore = create<AppState>()(
         }
         return { tabs: newTabs, activeTabId: newActiveId };
       }),
+
+      closeOtherTabs: (id) => set((state) => {
+        const keep = state.tabs.find(t => t.id === id);
+        if (!keep) return state;
+        return { tabs: [keep], activeTabId: id };
+      }),
+
+      closeTabsToLeft: (id) => set((state) => {
+        const index = state.tabs.findIndex(t => t.id === id);
+        if (index === -1) return state;
+        const newTabs = state.tabs.slice(index);
+        const activeStillExists = state.activeTabId ? newTabs.some(t => t.id === state.activeTabId) : false;
+        return { tabs: newTabs, activeTabId: activeStillExists ? state.activeTabId : id };
+      }),
+
+      closeTabsToRight: (id) => set((state) => {
+        const index = state.tabs.findIndex(t => t.id === id);
+        if (index === -1) return state;
+        const newTabs = state.tabs.slice(0, index + 1);
+        const activeStillExists = state.activeTabId ? newTabs.some(t => t.id === state.activeTabId) : false;
+        return { tabs: newTabs, activeTabId: activeStillExists ? state.activeTabId : id };
+      }),
+
+      closeAllTabs: () => set(() => ({ tabs: [], activeTabId: null })),
       
       setActiveTab: (id) => set({ activeTabId: id }),
       setActiveContext: (context) => set({ activeContext: context }),

@@ -29,9 +29,17 @@ export function DBShowCreateTable(arg1:connection.ConnectionConfig,arg2:string,a
 
 export function DataSync(arg1:sync.SyncConfig):Promise<sync.SyncResult>;
 
+export function DataSyncAnalyze(arg1:sync.SyncConfig):Promise<connection.QueryResult>;
+
+export function DataSyncPreview(arg1:sync.SyncConfig,arg2:string,arg3:number):Promise<connection.QueryResult>;
+
 export function ExportData(arg1:Array<Record<string, any>>,arg2:Array<string>,arg3:string,arg4:string):Promise<connection.QueryResult>;
 
+export function ExportDatabaseSQL(arg1:connection.ConnectionConfig,arg2:string,arg3:boolean):Promise<connection.QueryResult>;
+
 export function ExportTable(arg1:connection.ConnectionConfig,arg2:string,arg3:string,arg4:string):Promise<connection.QueryResult>;
+
+export function ExportTablesSQL(arg1:connection.ConnectionConfig,arg2:string,arg3:Array<string>,arg4:boolean):Promise<connection.QueryResult>;
 
 export function ImportConfigFile():Promise<connection.QueryResult>;
 
