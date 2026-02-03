@@ -36,3 +36,41 @@ html, body, #root {
   white-space: nowrap;
   padding-right: 8px;
 }
+
+.ant-btn {
+  transition: background-color var(--motion-fast) var(--motion-ease-out),
+    border-color var(--motion-fast) var(--motion-ease-out),
+    color var(--motion-fast) var(--motion-ease-out),
+    box-shadow var(--motion-base) var(--motion-ease-out),
+    transform var(--motion-fast) var(--motion-ease-out);
+}
+
+.ant-btn:active {
+  transform: translateY(1px);
+}
+
+.ant-tabs-tab {
+  border-radius: var(--radius-sm);
+  transition: color var(--motion-fast) var(--motion-ease-out),
+    background-color var(--motion-fast) var(--motion-ease-out);
+}
+
+.ant-tabs-tab:hover {
+  background: var(--color-surface-hover);
+}
+
+.ant-tree .ant-tree-node-content-wrapper {
+  border-radius: var(--radius-sm);
+  transition: background-color var(--motion-fast) var(--motion-ease-out);
+}
+
+.ant-tree .ant-tree-node-content-wrapper:hover {
+  background: var(--color-surface-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

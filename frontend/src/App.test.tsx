@@ -49,3 +49,12 @@ describe('App theme', () => {
     expect(document.documentElement.dataset.theme).toBe('light')
   })
 })
+
+describe('App layout', () => {
+  it('renders layout containers with expected classes', () => {
+    render(<App />)
+    expect(document.querySelector('.app-shell')).toBeTruthy()
+    expect(document.querySelector('.app-sider')).toBeTruthy()
+    expect(document.querySelector('.app-content')).toBeTruthy()
+  })
+})
