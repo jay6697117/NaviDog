@@ -135,10 +135,7 @@ func (a *App) ImportData(config connection.ConnectionConfig, dbName, tableName s
 		return connection.QueryResult{Success: true, Message: "No data to import"}
 	}
 
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
@@ -164,20 +161,15 @@ func (a *App) ImportData(config connection.ConnectionConfig, dbName, tableName s
 				values = append(values, fmt.Sprintf("'%s'", vStr))
 			}
 		}
-		
-		query := fmt.Sprintf("INSERT INTO `%s` (%s) VALUES (%s)", 
-			tableName, 
-			strings.Join(cols, ", "), 
-			strings.Join(values, ", "))
-		
-		if runConfig.Type == "postgres" {
-             pgCols := make([]string, len(cols))
-             for i, c := range cols { pgCols[i] = fmt.Sprintf("\"%s\"", c) }
-             query = fmt.Sprintf("INSERT INTO \"%s\" (%s) VALUES (%s)",
-                tableName, 
-                strings.Join(pgCols, ", "), 
-                strings.Join(values, ", "))
+		quotedCols := make([]string, len(cols))
+		for i, c := range cols {
+			quotedCols[i] = quoteIdentByType(runConfig.Type, c)
 		}
+
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+			quoteQualifiedIdentByType(runConfig.Type, tableName),
+			strings.Join(quotedCols, ", "),
+			strings.Join(values, ", "))
 
 		_, err := dbInst.Exec(query)
 		if err != nil {
@@ -192,10 +184,7 @@ func (a *App) ImportData(config connection.ConnectionConfig, dbName, tableName s
 }
 
 func (a *App) ApplyChanges(config connection.ConnectionConfig, dbName, tableName string, changes connection.ChangeSet) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
@@ -223,20 +212,14 @@ func (a *App) ExportTable(config connection.ConnectionConfig, dbName string, tab
 		return connection.QueryResult{Success: false, Message: "Cancelled"}
 	}
 
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 	
 dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	query := fmt.Sprintf("SELECT * FROM `%s`", tableName)
-	if runConfig.Type == "postgres" {
-		query = fmt.Sprintf("SELECT * FROM \"%s\"", tableName)
-	}
+	query := fmt.Sprintf("SELECT * FROM %s", quoteQualifiedIdentByType(runConfig.Type, tableName))
 	
 data, columns, err := dbInst.Query(query)
 	if err != nil {
@@ -316,6 +299,45 @@ data, columns, err := dbInst.Query(query)
 	}
 
 	return connection.QueryResult{Success: true, Message: "Export successful"}
+}
+
+func quoteIdentByType(dbType string, ident string) string {
+	if ident == "" {
+		return ident
+	}
+
+	switch dbType {
+	case "mysql":
+		return "`" + strings.ReplaceAll(ident, "`", "``") + "`"
+	default:
+		return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
+	}
+}
+
+func quoteQualifiedIdentByType(dbType string, ident string) string {
+	raw := strings.TrimSpace(ident)
+	if raw == "" {
+		return raw
+	}
+
+	parts := strings.Split(raw, ".")
+	if len(parts) <= 1 {
+		return quoteIdentByType(dbType, raw)
+	}
+
+	quotedParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		quotedParts = append(quotedParts, quoteIdentByType(dbType, part))
+	}
+
+	if len(quotedParts) == 0 {
+		return quoteIdentByType(dbType, raw)
+	}
+	return strings.Join(quotedParts, ".")
 }
 
 // ExportData exports provided data to a file

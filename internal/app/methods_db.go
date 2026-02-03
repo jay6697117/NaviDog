@@ -83,10 +83,7 @@ func (a *App) MySQLShowCreateTable(config connection.ConnectionConfig, dbName st
 }
 
 func (a *App) DBQuery(config connection.ConnectionConfig, dbName string, query string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
@@ -143,10 +140,7 @@ func (a *App) DBGetDatabases(config connection.ConnectionConfig) connection.Quer
 }
 
 func (a *App) DBGetTables(config connection.ConnectionConfig, dbName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
@@ -169,10 +163,7 @@ func (a *App) DBGetTables(config connection.ConnectionConfig, dbName string) con
 }
 
 func (a *App) DBShowCreateTable(config connection.ConnectionConfig, dbName string, tableName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
@@ -180,7 +171,8 @@ func (a *App) DBShowCreateTable(config connection.ConnectionConfig, dbName strin
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	sqlStr, err := dbInst.GetCreateStatement(dbName, tableName)
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+	sqlStr, err := dbInst.GetCreateStatement(schemaName, pureTableName)
 	if err != nil {
 		logger.Error(err, "DBShowCreateTable 获取建表语句失败：%s 表=%s", formatConnSummary(runConfig), tableName)
 		return connection.QueryResult{Success: false, Message: err.Error()}
@@ -190,17 +182,15 @@ func (a *App) DBShowCreateTable(config connection.ConnectionConfig, dbName strin
 }
 
 func (a *App) DBGetColumns(config connection.ConnectionConfig, dbName string, tableName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	columns, err := dbInst.GetColumns(dbName, tableName)
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+	columns, err := dbInst.GetColumns(schemaName, pureTableName)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
@@ -209,17 +199,15 @@ func (a *App) DBGetColumns(config connection.ConnectionConfig, dbName string, ta
 }
 
 func (a *App) DBGetIndexes(config connection.ConnectionConfig, dbName string, tableName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	indexes, err := dbInst.GetIndexes(dbName, tableName)
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+	indexes, err := dbInst.GetIndexes(schemaName, pureTableName)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
@@ -228,17 +216,15 @@ func (a *App) DBGetIndexes(config connection.ConnectionConfig, dbName string, ta
 }
 
 func (a *App) DBGetForeignKeys(config connection.ConnectionConfig, dbName string, tableName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	fks, err := dbInst.GetForeignKeys(dbName, tableName)
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+	fks, err := dbInst.GetForeignKeys(schemaName, pureTableName)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
@@ -247,17 +233,15 @@ func (a *App) DBGetForeignKeys(config connection.ConnectionConfig, dbName string
 }
 
 func (a *App) DBGetTriggers(config connection.ConnectionConfig, dbName string, tableName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
 
-	triggers, err := dbInst.GetTriggers(dbName, tableName)
+	schemaName, pureTableName := normalizeSchemaAndTable(config, dbName, tableName)
+	triggers, err := dbInst.GetTriggers(schemaName, pureTableName)
 	if err != nil {
 		return connection.QueryResult{Success: false, Message: err.Error()}
 	}
@@ -266,10 +250,7 @@ func (a *App) DBGetTriggers(config connection.ConnectionConfig, dbName string, t
 }
 
 func (a *App) DBGetAllColumns(config connection.ConnectionConfig, dbName string) connection.QueryResult {
-	runConfig := config
-	if dbName != "" {
-		runConfig.Database = dbName
-	}
+	runConfig := normalizeRunConfig(config, dbName)
 
 	dbInst, err := a.getDatabase(runConfig)
 	if err != nil {

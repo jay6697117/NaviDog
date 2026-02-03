@@ -8,14 +8,19 @@ import { useStore } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import 'react-resizable/css/styles.css';
 
+// Normalize RFC3339-like datetime strings to `YYYY-MM-DD HH:mm:ss` for display/editing.
+const normalizeDateTimeString = (val: string) => {
+    const match = val.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
+    if (!match) return val;
+    return `${match[1]} ${match[2]}`;
+};
+
 // --- Helper: Format Value ---
 const formatCellValue = (val: any) => {
     if (val === null) return <span style={{ color: '#ccc' }}>NULL</span>;
     if (typeof val === 'object') return JSON.stringify(val);
     if (typeof val === 'string') {
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) {
-            return val.replace('T', ' ').replace(/\+.*$/, '').replace(/Z$/, '');
-        }
+        return normalizeDateTimeString(val);
     }
     return String(val);
 };
@@ -103,13 +108,15 @@ const EditableCell: React.FC<EditableCellProps> = React.memo(({
 
   const toggleEdit = () => {
     setEditing(!editing);
-    form.setFieldsValue({ [dataIndex]: record[dataIndex] });
+    const raw = record[dataIndex];
+    const initialValue = typeof raw === 'string' ? normalizeDateTimeString(raw) : raw;
+    form.setFieldsValue({ [dataIndex]: initialValue });
   };
 
   const save = async () => {
     try {
       if (!form) return;
-      const values = await form.validateFields();
+      const values = await form.validateFields([dataIndex]);
       toggleEdit();
       handleSave({ ...record, ...values });
     } catch (errInfo) {
@@ -278,6 +285,7 @@ const DataGrid: React.FC<DataGridProps> = ({
       setModifiedRows({});
       setDeletedRowKeys(new Set());
       setSelectedRowKeys([]);
+      form.resetFields();
   }, [tableName, dbName, connectionId]); // Reset on context change
 
   const displayData = useMemo(() => {

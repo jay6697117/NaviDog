@@ -129,7 +129,11 @@ func (o *OracleDB) Query(query string) ([]map[string]interface{}, []string, erro
 			val := values[i]
 			b, ok := val.([]byte)
 			if ok {
-				v = string(b)
+				if b == nil {
+					v = nil
+				} else {
+					v = string(b)
+				}
 			} else {
 				v = val
 			}
@@ -171,7 +175,7 @@ func (o *OracleDB) GetTables(dbName string) ([]string, error) {
 	// dbName is Schema/Owner
 	query := "SELECT table_name FROM user_tables"
 	if dbName != "" {
-		query = fmt.Sprintf("SELECT table_name FROM all_tables WHERE owner = '%s'", strings.ToUpper(dbName))
+		query = fmt.Sprintf("SELECT owner, table_name FROM all_tables WHERE owner = '%s' ORDER BY table_name", strings.ToUpper(dbName))
 	}
 
 	data, _, err := o.Query(query)
@@ -181,6 +185,14 @@ func (o *OracleDB) GetTables(dbName string) ([]string, error) {
 
 	var tables []string
 	for _, row := range data {
+		if dbName != "" {
+			if owner, okOwner := row["OWNER"]; okOwner {
+				if name, okName := row["TABLE_NAME"]; okName {
+					tables = append(tables, fmt.Sprintf("%v.%v", owner, name))
+					continue
+				}
+			}
+		}
 		if val, ok := row["TABLE_NAME"]; ok {
 			tables = append(tables, fmt.Sprintf("%v", val))
 		}
