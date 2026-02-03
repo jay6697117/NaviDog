@@ -243,26 +243,38 @@ const DataGrid: React.FC<DataGridProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-      if (!containerRef.current) return;
-      
-      let rafId: number;
+      const el = containerRef.current;
+      if (!el) return;
+
+      let rafId: number | null = null;
+
       const resizeObserver = new ResizeObserver(entries => {
+          if (rafId !== null) cancelAnimationFrame(rafId);
           rafId = requestAnimationFrame(() => {
-              for (let entry of entries) {
-                  // Use boundingClientRect for more accurate render size (including padding if any)
-                  const height = entry.contentRect.height;
-                  if (height < 50) return; 
-                  // Subtract header (~42px) and a buffer
-                  const h = Math.max(100, height - 42); 
-                  setTableHeight(h); 
-              }
+              const target = (entries[0]?.target as HTMLElement | undefined) || containerRef.current;
+              if (!target) return;
+
+              const height = target.getBoundingClientRect().height;
+              if (!Number.isFinite(height) || height < 50) return;
+
+              const headerEl =
+                  (target.querySelector('.ant-table-header') as HTMLElement | null) ||
+                  (target.querySelector('.ant-table-thead') as HTMLElement | null);
+              const rawHeaderHeight = headerEl ? headerEl.getBoundingClientRect().height : NaN;
+              const headerHeight =
+                  Number.isFinite(rawHeaderHeight) && rawHeaderHeight >= 24 && rawHeaderHeight <= 120 ? rawHeaderHeight : 42;
+
+              // 留一点余量，避免底部（边框/滚动条）遮挡最后一行
+              const extraBottom = 16;
+              const nextHeight = Math.max(100, Math.floor(height - headerHeight - extraBottom));
+              setTableHeight(nextHeight);
           });
       });
-      
-      resizeObserver.observe(containerRef.current);
+
+      resizeObserver.observe(el);
       return () => {
           resizeObserver.disconnect();
-          cancelAnimationFrame(rafId);
+          if (rafId !== null) cancelAnimationFrame(rafId);
       };
   }, []);
 
@@ -727,12 +739,12 @@ const DataGrid: React.FC<DataGridProps> = ({
   const enableVirtual = mergedDisplayData.length >= 200;
 
   return (
-    <div className={gridId} style={{ height: '100%', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-       {/* Toolbar */}
-       <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center' }}>
-           {onReload && <Button icon={<ReloadOutlined />} onClick={() => {
-               setAddedRows([]);
-               setModifiedRows({});
+    <div className={gridId} style={{ flex: '1 1 auto', height: '100%', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {/* Toolbar */}
+        <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center' }}>
+            {onReload && <Button icon={<ReloadOutlined />} onClick={() => {
+                setAddedRows([]);
+                setModifiedRows({});
                setDeletedRowKeys(new Set());
                setSelectedRowKeys([]);
                onReload();
@@ -842,14 +854,13 @@ const DataGrid: React.FC<DataGridProps> = ({
            </div>
        )}
 
-       <style>{`
-           .${gridId} .row-added td { background-color: #f6ffed !important; }
-           .${gridId} .row-modified td { background-color: #e6f7ff !important; }
-           .${gridId} .ant-table-body {
-               height: ${tableHeight}px !important;
-               max-height: ${tableHeight}px !important;
-           }
-       `}</style>
+        <style>{`
+            .${gridId} .row-added td { background-color: #f6ffed !important; }
+            .${gridId} .row-modified td { background-color: #e6f7ff !important; }
+            .${gridId} .ant-table-body {
+                max-height: ${tableHeight}px !important;
+            }
+        `}</style>
        
        {/* Ghost Resize Line for Columns */}
        <div 

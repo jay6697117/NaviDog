@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"GoNavi-Wails/internal/connection"
@@ -167,21 +168,306 @@ func (p *PostgresDB) GetCreateStatement(dbName, tableName string) (string, error
 }
 
 func (p *PostgresDB) GetColumns(dbName, tableName string) ([]connection.ColumnDefinition, error) {
-	return []connection.ColumnDefinition{}, nil
+	schema := strings.TrimSpace(dbName)
+	if schema == "" {
+		schema = "public"
+	}
+	table := strings.TrimSpace(tableName)
+	if table == "" {
+		return nil, fmt.Errorf("table name required")
+	}
+
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+
+	query := fmt.Sprintf(`
+SELECT
+	a.attname AS column_name,
+	pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
+	CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable,
+	pg_get_expr(ad.adbin, ad.adrelid) AS column_default,
+	col_description(a.attrelid, a.attnum) AS comment,
+	CASE WHEN pk.attname IS NOT NULL THEN 'PRI' ELSE '' END AS column_key
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_attribute a ON a.attrelid = c.oid
+LEFT JOIN pg_attrdef ad ON ad.adrelid = c.oid AND ad.adnum = a.attnum
+LEFT JOIN (
+	SELECT i.indrelid, a3.attname
+	FROM pg_index i
+	JOIN pg_attribute a3 ON a3.attrelid = i.indrelid AND a3.attnum = ANY(i.indkey)
+	WHERE i.indisprimary
+) pk ON pk.indrelid = c.oid AND pk.attname = a.attname
+WHERE c.relkind IN ('r', 'p')
+  AND n.nspname = '%s'
+  AND c.relname = '%s'
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+ORDER BY a.attnum`, esc(schema), esc(table))
+
+	data, _, err := p.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	var columns []connection.ColumnDefinition
+	for _, row := range data {
+		col := connection.ColumnDefinition{
+			Name:     fmt.Sprintf("%v", row["column_name"]),
+			Type:     fmt.Sprintf("%v", row["data_type"]),
+			Nullable: fmt.Sprintf("%v", row["is_nullable"]),
+			Key:      fmt.Sprintf("%v", row["column_key"]),
+			Extra:    "",
+			Comment:  "",
+		}
+
+		if v, ok := row["comment"]; ok && v != nil {
+			col.Comment = fmt.Sprintf("%v", v)
+		}
+
+		if v, ok := row["column_default"]; ok && v != nil {
+			def := fmt.Sprintf("%v", v)
+			col.Default = &def
+			if strings.HasPrefix(strings.ToLower(strings.TrimSpace(def)), "nextval(") {
+				col.Extra = "auto_increment"
+			}
+		}
+
+		columns = append(columns, col)
+	}
+	return columns, nil
 }
 
 func (p *PostgresDB) GetIndexes(dbName, tableName string) ([]connection.IndexDefinition, error) {
-	return []connection.IndexDefinition{}, nil
+	schema := strings.TrimSpace(dbName)
+	if schema == "" {
+		schema = "public"
+	}
+	table := strings.TrimSpace(tableName)
+	if table == "" {
+		return nil, fmt.Errorf("table name required")
+	}
+
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+
+	query := fmt.Sprintf(`
+SELECT
+	i.relname AS index_name,
+	a.attname AS column_name,
+	ix.indisunique AS is_unique,
+	x.ordinality AS seq_in_index,
+	am.amname AS index_type
+FROM pg_class t
+JOIN pg_namespace n ON n.oid = t.relnamespace
+JOIN pg_index ix ON t.oid = ix.indrelid
+JOIN pg_class i ON i.oid = ix.indexrelid
+JOIN pg_am am ON i.relam = am.oid
+JOIN unnest(ix.indkey) WITH ORDINALITY AS x(attnum, ordinality) ON TRUE
+JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = x.attnum
+WHERE t.relkind IN ('r', 'p')
+  AND t.relname = '%s'
+  AND n.nspname = '%s'
+ORDER BY i.relname, x.ordinality`, esc(table), esc(schema))
+
+	data, _, err := p.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	parseBool := func(v interface{}) bool {
+		switch val := v.(type) {
+		case bool:
+			return val
+		case string:
+			s := strings.ToLower(strings.TrimSpace(val))
+			return s == "t" || s == "true" || s == "1" || s == "y" || s == "yes"
+		default:
+			s := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", v)))
+			return s == "t" || s == "true" || s == "1" || s == "y" || s == "yes"
+		}
+	}
+
+	parseInt := func(v interface{}) int {
+		switch val := v.(type) {
+		case int:
+			return val
+		case int64:
+			return int(val)
+		case float64:
+			return int(val)
+		case string:
+			// best effort
+			var n int
+			_, _ = fmt.Sscanf(strings.TrimSpace(val), "%d", &n)
+			return n
+		default:
+			var n int
+			_, _ = fmt.Sscanf(strings.TrimSpace(fmt.Sprintf("%v", v)), "%d", &n)
+			return n
+		}
+	}
+
+	var indexes []connection.IndexDefinition
+	for _, row := range data {
+		isUnique := false
+		if v, ok := row["is_unique"]; ok && v != nil {
+			isUnique = parseBool(v)
+		}
+
+		nonUnique := 1
+		if isUnique {
+			nonUnique = 0
+		}
+
+		seq := 0
+		if v, ok := row["seq_in_index"]; ok && v != nil {
+			seq = parseInt(v)
+		}
+
+		indexType := ""
+		if v, ok := row["index_type"]; ok && v != nil {
+			indexType = strings.ToUpper(fmt.Sprintf("%v", v))
+		}
+		if indexType == "" {
+			indexType = "BTREE"
+		}
+
+		idx := connection.IndexDefinition{
+			Name:       fmt.Sprintf("%v", row["index_name"]),
+			ColumnName: fmt.Sprintf("%v", row["column_name"]),
+			NonUnique:  nonUnique,
+			SeqInIndex: seq,
+			IndexType:  indexType,
+		}
+		indexes = append(indexes, idx)
+	}
+	return indexes, nil
 }
 
 func (p *PostgresDB) GetForeignKeys(dbName, tableName string) ([]connection.ForeignKeyDefinition, error) {
-	return []connection.ForeignKeyDefinition{}, nil
+	schema := strings.TrimSpace(dbName)
+	if schema == "" {
+		schema = "public"
+	}
+	table := strings.TrimSpace(tableName)
+	if table == "" {
+		return nil, fmt.Errorf("table name required")
+	}
+
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+
+	query := fmt.Sprintf(`
+SELECT
+	tc.constraint_name AS constraint_name,
+	kcu.column_name AS column_name,
+	ccu.table_schema AS foreign_table_schema,
+	ccu.table_name AS foreign_table_name,
+	ccu.column_name AS foreign_column_name
+FROM information_schema.table_constraints AS tc
+JOIN information_schema.key_column_usage AS kcu
+  ON tc.constraint_name = kcu.constraint_name
+  AND tc.table_schema = kcu.table_schema
+JOIN information_schema.constraint_column_usage AS ccu
+  ON ccu.constraint_name = tc.constraint_name
+  AND ccu.table_schema = tc.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_name = '%s'
+  AND tc.table_schema = '%s'
+ORDER BY tc.constraint_name, kcu.ordinal_position`, esc(table), esc(schema))
+
+	data, _, err := p.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	var fks []connection.ForeignKeyDefinition
+	for _, row := range data {
+		refSchema := ""
+		if v, ok := row["foreign_table_schema"]; ok && v != nil {
+			refSchema = fmt.Sprintf("%v", v)
+		}
+		refTable := fmt.Sprintf("%v", row["foreign_table_name"])
+		refTableName := refTable
+		if strings.TrimSpace(refSchema) != "" {
+			refTableName = fmt.Sprintf("%s.%s", refSchema, refTable)
+		}
+
+		fk := connection.ForeignKeyDefinition{
+			Name:           fmt.Sprintf("%v", row["constraint_name"]),
+			ColumnName:     fmt.Sprintf("%v", row["column_name"]),
+			RefTableName:   refTableName,
+			RefColumnName:  fmt.Sprintf("%v", row["foreign_column_name"]),
+			ConstraintName: fmt.Sprintf("%v", row["constraint_name"]),
+		}
+		fks = append(fks, fk)
+	}
+	return fks, nil
 }
 
 func (p *PostgresDB) GetTriggers(dbName, tableName string) ([]connection.TriggerDefinition, error) {
-	return []connection.TriggerDefinition{}, nil
+	schema := strings.TrimSpace(dbName)
+	if schema == "" {
+		schema = "public"
+	}
+	table := strings.TrimSpace(tableName)
+	if table == "" {
+		return nil, fmt.Errorf("table name required")
+	}
+
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+
+	query := fmt.Sprintf(`
+SELECT trigger_name, action_timing, event_manipulation, action_statement
+FROM information_schema.triggers
+WHERE event_object_table = '%s'
+  AND event_object_schema = '%s'
+ORDER BY trigger_name, event_manipulation`, esc(table), esc(schema))
+
+	data, _, err := p.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	var triggers []connection.TriggerDefinition
+	for _, row := range data {
+		trig := connection.TriggerDefinition{
+			Name:      fmt.Sprintf("%v", row["trigger_name"]),
+			Timing:    fmt.Sprintf("%v", row["action_timing"]),
+			Event:     fmt.Sprintf("%v", row["event_manipulation"]),
+			Statement: fmt.Sprintf("%v", row["action_statement"]),
+		}
+		triggers = append(triggers, trig)
+	}
+	return triggers, nil
 }
 
 func (p *PostgresDB) GetAllColumns(dbName string) ([]connection.ColumnDefinitionWithTable, error) {
-	return []connection.ColumnDefinitionWithTable{}, nil
+	query := `
+SELECT table_schema, table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+  AND table_schema NOT LIKE 'pg_%'
+ORDER BY table_schema, table_name, ordinal_position`
+
+	data, _, err := p.Query(query)
+	if err != nil {
+		return nil, err
+	}
+
+	var cols []connection.ColumnDefinitionWithTable
+	for _, row := range data {
+		schema := fmt.Sprintf("%v", row["table_schema"])
+		table := fmt.Sprintf("%v", row["table_name"])
+		tableName := table
+		if strings.TrimSpace(schema) != "" {
+			tableName = fmt.Sprintf("%s.%s", schema, table)
+		}
+
+		col := connection.ColumnDefinitionWithTable{
+			TableName: tableName,
+			Name:      fmt.Sprintf("%v", row["column_name"]),
+			Type:      fmt.Sprintf("%v", row["data_type"]),
+		}
+		cols = append(cols, col)
+	}
+	return cols, nil
 }

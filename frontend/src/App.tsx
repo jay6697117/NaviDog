@@ -285,12 +285,12 @@ function App() {
                 title="拖动调整宽度"
             />
           </Sider>
-          <Content style={{ background: darkMode ? '#141414' : '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-                <TabManager />
-            </div>
-            {isLogPanelOpen && (
-                <LogPanel 
+           <Content style={{ background: darkMode ? '#141414' : '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                 <TabManager />
+             </div>
+             {isLogPanelOpen && (
+                 <LogPanel 
                     height={logPanelHeight} 
                     onClose={() => setIsLogPanelOpen(false)} 
                     onResizeStart={handleLogResizeStart} 

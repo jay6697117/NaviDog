@@ -46,15 +46,29 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
         ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
     };
 
+    const normalizeIdentPart = (ident: string) => {
+        let raw = (ident || '').trim();
+        if (!raw) return raw;
+        const first = raw[0];
+        const last = raw[raw.length - 1];
+        if ((first === '"' && last === '"') || (first === '`' && last === '`')) {
+            raw = raw.slice(1, -1).trim();
+        }
+        // 防御：如果传入已包含引号（例如 `"schema"."table"` 的拆分结果），移除残留引号再重新安全转义。
+        raw = raw.replace(/["`]/g, '').trim();
+        return raw;
+    };
+
     const quoteIdentPart = (ident: string) => {
-        if (!ident) return ident;
-        if (config.type === 'mysql') return `\`${ident.replace(/`/g, '``')}\``;
-        return `"${ident.replace(/"/g, '""')}"`;
+        const raw = normalizeIdentPart(ident);
+        if (!raw) return raw;
+        if (config.type === 'mysql') return `\`${raw.replace(/`/g, '``')}\``;
+        return `"${raw.replace(/"/g, '""')}"`;
     };
     const quoteQualifiedIdent = (ident: string) => {
         const raw = (ident || '').trim();
         if (!raw) return raw;
-        const parts = raw.split('.').filter(Boolean);
+        const parts = raw.split('.').map(normalizeIdentPart).filter(Boolean);
         if (parts.length <= 1) return quoteIdentPart(raw);
         return parts.map(quoteIdentPart).join('.');
     };
@@ -227,7 +241,7 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
   }, [tab, sortInfo, filterConditions]); // Initial load and re-load on sort/filter
 
   return (
-    <div style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+    <div style={{ flex: '1 1 auto', minHeight: 0, height: '100%', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <DataGrid
           data={data}
           columnNames={columnNames}

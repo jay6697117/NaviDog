@@ -47,6 +47,8 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [autoExpandParent, setAutoExpandParent] = useState(true);
   const [loadedKeys, setLoadedKeys] = useState<React.Key[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
+  const [selectedNodes, setSelectedNodes] = useState<any[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: MenuProps['items'] } | null>(null);
   
   // Virtual Scroll State
@@ -283,10 +285,14 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
   };
 
   const onSelect = (keys: React.Key[], info: any) => {
-      if (!info.node.selected) {
+      setSelectedKeys(keys);
+      setSelectedNodes(info.selectedNodes || []);
+
+      if (keys.length === 0) {
           setActiveContext(null);
           return;
       }
+      if (!info.selected) return;
       
       const { type, dataRef, key, title } = info.node;
       
@@ -313,15 +319,6 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
   };
 
   const onDoubleClick = (e: any, node: any) => {
-      const key = node.key;
-      const isExpanded = expandedKeys.includes(key);
-      const newExpandedKeys = isExpanded 
-          ? expandedKeys.filter(k => k !== key) 
-          : [...expandedKeys, key];
-      
-      setExpandedKeys(newExpandedKeys);
-      if (!isExpanded) setAutoExpandParent(false);
-
       if (node.type === 'table') {
           const { tableName, dbName, id } = node.dataRef;
           addTab({
@@ -332,6 +329,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
               dbName,
               tableName,
           });
+          return;
       } else if (node.type === 'saved-query') {
           const q = node.dataRef;
           addTab({
@@ -342,7 +340,17 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
               dbName: q.dbName,
               query: q.sql
           });
+          return;
       }
+
+      const key = node.key;
+      const isExpanded = expandedKeys.includes(key);
+      const newExpandedKeys = isExpanded 
+          ? expandedKeys.filter(k => k !== key) 
+          : [...expandedKeys, key];
+      
+      setExpandedKeys(newExpandedKeys);
+      if (!isExpanded) setAutoExpandParent(false);
   };
   
 	  const handleCopyStructure = async (node: any) => {
@@ -379,6 +387,60 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           message.success('导出成功');
       } else if (res.message !== 'Cancelled') {
           message.error('导出失败: ' + res.message);
+      }
+  };
+
+  const normalizeConnConfig = (raw: any) => ({
+      ...raw,
+      port: Number(raw.port),
+      password: raw.password || "",
+      database: raw.database || "",
+      useSSH: raw.useSSH || false,
+      ssh: raw.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
+  });
+
+  const handleExportDatabaseSQL = async (node: any, includeData: boolean) => {
+      const conn = node.dataRef;
+      const dbName = conn.dbName || node.title;
+      const hide = message.loading(includeData ? `正在备份数据库 ${dbName} (结构+数据)...` : `正在导出数据库 ${dbName} 表结构...`, 0);
+      try {
+          const res = await (window as any).go.app.App.ExportDatabaseSQL(normalizeConnConfig(conn.config), dbName, includeData);
+          hide();
+          if (res.success) {
+              message.success('导出成功');
+          } else if (res.message !== 'Cancelled') {
+              message.error('导出失败: ' + res.message);
+          }
+      } catch (e: any) {
+          hide();
+          message.error('导出失败: ' + (e?.message || String(e)));
+      }
+  };
+
+  const handleExportTablesSQL = async (nodes: any[], includeData: boolean) => {
+      if (!nodes || nodes.length === 0) return;
+      const first = nodes[0].dataRef;
+      const dbName = first.dbName;
+      const connId = first.id;
+      const allSame = nodes.every(n => n?.dataRef?.id === connId && n?.dataRef?.dbName === dbName);
+      if (!allSame) {
+          message.error('请在同一连接、同一数据库下选择多张表进行导出');
+          return;
+      }
+
+      const tableNames = nodes.map(n => n.dataRef.tableName).filter(Boolean);
+      const hide = message.loading(includeData ? `正在备份选中表 (${tableNames.length})...` : `正在导出选中表结构 (${tableNames.length})...`, 0);
+      try {
+          const res = await (window as any).go.app.App.ExportTablesSQL(normalizeConnConfig(first.config), dbName, tableNames, includeData);
+          hide();
+          if (res.success) {
+              message.success('导出成功');
+          } else if (res.message !== 'Cancelled') {
+              message.error('导出失败: ' + res.message);
+          }
+      } catch (e: any) {
+          hide();
+          message.error('导出失败: ' + (e?.message || String(e)));
       }
   };
 
@@ -550,6 +612,18 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                icon: <ReloadOutlined />,
                onClick: () => loadTables(node)
            },
+           {
+               key: 'export-db-schema',
+               label: '导出全部表结构 (SQL)',
+               icon: <ExportOutlined />,
+               onClick: () => handleExportDatabaseSQL(node, false)
+           },
+           {
+               key: 'backup-db-sql',
+               label: '备份全部表 (结构+数据 SQL)',
+               icon: <SaveOutlined />,
+               onClick: () => handleExportDatabaseSQL(node, true)
+           },
            { type: 'divider' },
            {
                key: 'disconnect-db',
@@ -588,7 +662,25 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
              }
        ];
     } else if (node.type === 'table') {
+        const sameContextSelectedTables = (selectedNodes || []).filter((n: any) => n?.type === 'table' && n?.dataRef?.id === node?.dataRef?.id && n?.dataRef?.dbName === node?.dataRef?.dbName);
+        const selectedForAction = sameContextSelectedTables.some((n: any) => n?.key === node.key) ? sameContextSelectedTables : [node];
+
         return [
+            ...(selectedForAction.length > 1 ? ([
+                {
+                    key: 'export-selected-schema',
+                    label: `导出选中表结构 (${selectedForAction.length}) (SQL)`,
+                    icon: <ExportOutlined />,
+                    onClick: () => handleExportTablesSQL(selectedForAction, false)
+                },
+                {
+                    key: 'backup-selected-sql',
+                    label: `备份选中表 (${selectedForAction.length}) (结构+数据 SQL)`,
+                    icon: <SaveOutlined />,
+                    onClick: () => handleExportTablesSQL(selectedForAction, true)
+                },
+                { type: 'divider' as const }
+            ]) : []),
             {
                 key: 'new-query',
                 label: '新建查询',
@@ -684,6 +776,8 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                 loadedKeys={loadedKeys}
                 onLoad={setLoadedKeys}
                 autoExpandParent={autoExpandParent}
+                multiple
+                selectedKeys={selectedKeys}
                 blockNode
                 height={treeHeight}
                 onRightClick={onRightClick}

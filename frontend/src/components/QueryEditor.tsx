@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
-import { Button, message, Modal, Input, Form, Dropdown, MenuProps, Tooltip, Select } from 'antd';
-import { PlayCircleOutlined, SaveOutlined, FormatPainterOutlined, SettingOutlined } from '@ant-design/icons';
+import { Button, message, Modal, Input, Form, Dropdown, MenuProps, Tooltip, Select, Tabs } from 'antd';
+import { PlayCircleOutlined, SaveOutlined, FormatPainterOutlined, SettingOutlined, CloseOutlined } from '@ant-design/icons';
 import { format } from 'sql-formatter';
 import { TabData, ColumnDefinition } from '../types';
 import { useStore } from '../store';
@@ -11,11 +11,19 @@ import DataGrid, { GONAVI_ROW_KEY } from './DataGrid';
 const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
   const [query, setQuery] = useState(tab.query || 'SELECT * FROM ');
   
-  // DataGrid State
-  const [results, setResults] = useState<any[]>([]);
-  const [columnNames, setColumnNames] = useState<string[]>([]);
-  const [pkColumns, setPkColumns] = useState<string[]>([]);
-  const [targetTableName, setTargetTableName] = useState<string | undefined>(undefined);
+  type ResultSet = {
+      key: string;
+      sql: string;
+      rows: any[];
+      columns: string[];
+      tableName?: string;
+      pkColumns: string[];
+      readOnly: boolean;
+  };
+
+  // Result Sets
+  const [resultSets, setResultSets] = useState<ResultSet[]>([]);
+  const [activeResultKey, setActiveResultKey] = useState<string>('');
   
   const [loading, setLoading] = useState(false);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -210,6 +218,144 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
       },
   ];
 
+  const splitSQLStatements = (sql: string): string[] => {
+    const text = (sql || '').replace(/\r\n/g, '\n');
+    const statements: string[] = [];
+
+    let cur = '';
+    let inSingle = false;
+    let inDouble = false;
+    let inBacktick = false;
+    let escaped = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+    let dollarTag: string | null = null; // postgres/kingbase: $$...$$ or $tag$...$tag$
+
+    const push = () => {
+        const s = cur.trim();
+        if (s) statements.push(s);
+        cur = '';
+    };
+
+    const isWS = (ch: string) => ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r';
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = i + 1 < text.length ? text[i + 1] : '';
+        const prev = i > 0 ? text[i - 1] : '';
+        const next2 = i + 2 < text.length ? text[i + 2] : '';
+
+        if (!inSingle && !inDouble && !inBacktick) {
+            if (inLineComment) {
+                cur += ch;
+                if (ch === '\n') inLineComment = false;
+                continue;
+            }
+
+            if (inBlockComment) {
+                cur += ch;
+                if (ch === '*' && next === '/') {
+                    cur += next;
+                    i++;
+                    inBlockComment = false;
+                }
+                continue;
+            }
+
+            // Start comments
+            if (ch === '/' && next === '*') {
+                cur += ch + next;
+                i++;
+                inBlockComment = true;
+                continue;
+            }
+            if (ch === '#') {
+                cur += ch;
+                inLineComment = true;
+                continue;
+            }
+            if (ch === '-' && next === '-' && (i === 0 || isWS(prev)) && (next2 === '' || isWS(next2))) {
+                cur += ch + next;
+                i++;
+                inLineComment = true;
+                continue;
+            }
+
+            // Dollar-quoted strings (PG/Kingbase)
+            if (dollarTag) {
+                if (text.startsWith(dollarTag, i)) {
+                    cur += dollarTag;
+                    i += dollarTag.length - 1;
+                    dollarTag = null;
+                } else {
+                    cur += ch;
+                }
+                continue;
+            }
+            if (ch === '$') {
+                const m = text.slice(i).match(/^\$[A-Za-z0-9_]*\$/);
+                if (m && m[0]) {
+                    dollarTag = m[0];
+                    cur += dollarTag;
+                    i += dollarTag.length - 1;
+                    continue;
+                }
+            }
+        }
+
+        if (escaped) {
+            cur += ch;
+            escaped = false;
+            continue;
+        }
+
+        if ((inSingle || inDouble) && ch === '\\') {
+            cur += ch;
+            escaped = true;
+            continue;
+        }
+
+        if (!inDouble && !inBacktick && ch === '\'') {
+            inSingle = !inSingle;
+            cur += ch;
+            continue;
+        }
+        if (!inSingle && !inBacktick && ch === '"') {
+            inDouble = !inDouble;
+            cur += ch;
+            continue;
+        }
+        if (!inSingle && !inDouble && ch === '`') {
+            inBacktick = !inBacktick;
+            cur += ch;
+            continue;
+        }
+
+        if (!inSingle && !inDouble && !inBacktick && !dollarTag && (ch === ';' || ch === '；')) {
+            push();
+            continue;
+        }
+
+        cur += ch;
+    }
+
+    push();
+    return statements;
+  };
+
+  const getSelectedSQL = (): string => {
+      const editor = editorRef.current;
+      if (!editor) return '';
+      const model = editor.getModel?.();
+      const selection = editor.getSelection?.();
+      if (!model || !selection) return '';
+
+      const selected = model.getValueInRange?.(selection) || '';
+      if (typeof selected !== 'string') return '';
+      if (!selected.trim()) return '';
+      return selected;
+  };
+
   const handleRun = async () => {
     if (!query.trim()) return;
     if (!currentDb) {
@@ -217,6 +363,7 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         return;
     }
     setLoading(true);
+    const runStartTime = Date.now();
     const conn = connections.find(c => c.id === currentConnectionId);
     if (!conn) {
         message.error("Connection not found");
@@ -233,76 +380,114 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
     };
 
-    // Detect Simple Table Query
-    let simpleTableName: string | undefined = undefined;
-    let primaryKeys: string[] = [];
-    
-    // Naive regex to detect SELECT * FROM table
-    const tableMatch = query.match(/^\s*SELECT\s+\*\s+FROM\s+[`"]?(\w+)[`"]?\s*(?:WHERE.*)?(?:ORDER BY.*)?(?:LIMIT.*)?$/i);
-    if (tableMatch) {
-        simpleTableName = tableMatch[1];
-        // Fetch PKs for editing
-        const resCols = await DBGetColumns(config as any, currentDb, simpleTableName);
-        if (resCols.success) {
-            primaryKeys = (resCols.data as ColumnDefinition[]).filter(c => c.key === 'PRI').map(c => c.name);
-        }
-    }
-    setTargetTableName(simpleTableName);
-    setPkColumns(primaryKeys);
-
-    const startTime = Date.now();
     try {
-        const res = await DBQuery(config as any, currentDb, query);
-        const duration = Date.now() - startTime;
-        
-        addSqlLog({
-            id: `log-${Date.now()}-query`,
-            timestamp: Date.now(),
-            sql: query,
-            status: res.success ? 'success' : 'error',
-            duration,
-            message: res.success ? '' : res.message,
-            affectedRows: (res.success && !Array.isArray(res.data)) ? (res.data as any).affectedRows : (Array.isArray(res.data) ? res.data.length : undefined),
-            dbName: currentDb
-        });
+        const rawSQL = getSelectedSQL() || query;
+        const statements = splitSQLStatements(rawSQL);
+        if (statements.length === 0) {
+            message.info('没有可执行的 SQL。');
+            setResultSets([]);
+            setActiveResultKey('');
+            return;
+        }
 
-        if (res.success) {
-          if (Array.isArray(res.data)) {
-            if (res.data.length > 0) {
-                const cols = Object.keys(res.data[0]);
-                setColumnNames(cols);
-                const rows = res.data as any[];
+        const nextResultSets: ResultSet[] = [];
+
+        for (let idx = 0; idx < statements.length; idx++) {
+            const sql = statements[idx];
+            const startTime = Date.now();
+            const res = await DBQuery(config as any, currentDb, sql);
+            const duration = Date.now() - startTime;
+
+            addSqlLog({
+                id: `log-${Date.now()}-query-${idx + 1}`,
+                timestamp: Date.now(),
+                sql,
+                status: res.success ? 'success' : 'error',
+                duration,
+                message: res.success ? '' : res.message,
+                affectedRows: (res.success && !Array.isArray(res.data)) ? (res.data as any).affectedRows : (Array.isArray(res.data) ? res.data.length : undefined),
+                dbName: currentDb
+            });
+
+            if (!res.success) {
+                const prefix = statements.length > 1 ? `第 ${idx + 1} 条语句执行失败：` : '';
+                message.error(prefix + res.message);
+                setResultSets([]);
+                setActiveResultKey('');
+                return;
+            }
+
+            if (Array.isArray(res.data)) {
+                const rows = (res.data as any[]) || [];
+                const cols = (res.fields && res.fields.length > 0)
+                    ? (res.fields as string[])
+                    : (rows.length > 0 ? Object.keys(rows[0]) : []);
+
                 rows.forEach((row: any, i: number) => {
                     if (row && typeof row === 'object') row[GONAVI_ROW_KEY] = i;
                 });
-                setResults(rows);
+
+                let simpleTableName: string | undefined = undefined;
+                let primaryKeys: string[] = [];
+                const tableMatch = sql.match(/^\s*SELECT\s+\*\s+FROM\s+[`"]?(\w+)[`"]?\s*(?:WHERE.*)?(?:ORDER BY.*)?(?:LIMIT.*)?$/i);
+                if (tableMatch) {
+                    simpleTableName = tableMatch[1];
+                    const resCols = await DBGetColumns(config as any, currentDb, simpleTableName);
+                    if (resCols.success) {
+                        primaryKeys = (resCols.data as ColumnDefinition[]).filter(c => c.key === 'PRI').map(c => c.name);
+                    }
+                }
+
+                nextResultSets.push({
+                    key: `result-${idx + 1}`,
+                    sql,
+                    rows,
+                    columns: cols,
+                    tableName: simpleTableName,
+                    pkColumns: primaryKeys,
+                    readOnly: !simpleTableName
+                });
             } else {
-                message.info('查询执行成功，但没有返回结果。');
-                setResults([]);
-                setColumnNames([]);
+                const affected = Number((res.data as any)?.affectedRows);
+                if (Number.isFinite(affected)) {
+                    const row = { affectedRows: affected };
+                    (row as any)[GONAVI_ROW_KEY] = 0;
+                    nextResultSets.push({
+                        key: `result-${idx + 1}`,
+                        sql,
+                        rows: [row],
+                        columns: ['affectedRows'],
+                        pkColumns: [],
+                        readOnly: true
+                    });
+                }
             }
-          } else {
-              const affected = (res.data as any).affectedRows;
-              message.success(`受影响行数: ${affected}`);
-              setResults([]);
-              setColumnNames([]);
-          }
-        } else {
-          message.error(res.message);
+        }
+
+        setResultSets(nextResultSets);
+        setActiveResultKey(nextResultSets[0]?.key || '');
+
+        if (statements.length > 1) {
+            message.success(`已执行 ${statements.length} 条语句，生成 ${nextResultSets.length} 个结果集。`);
+        } else if (nextResultSets.length === 0) {
+            message.success('执行成功。');
         }
     } catch (e: any) {
         message.error("Error executing query: " + e.message);
         addSqlLog({
             id: `log-${Date.now()}-error`,
             timestamp: Date.now(),
-            sql: query,
+            sql: getSelectedSQL() || query,
             status: 'error',
-            duration: Date.now() - startTime,
+            duration: Date.now() - runStartTime,
             message: e.message,
             dbName: currentDb
         });
+        setResultSets([]);
+        setActiveResultKey('');
+    } finally {
+        setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSave = async () => {
@@ -322,8 +507,66 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
       }
   };
 
+  const handleCloseResult = (key: string) => {
+      setResultSets(prev => {
+          const idx = prev.findIndex(r => r.key === key);
+          if (idx < 0) return prev;
+          const next = prev.filter(r => r.key !== key);
+
+          setActiveResultKey(prevActive => {
+              if (prevActive && prevActive !== key) return prevActive;
+              const nextKey = next[idx]?.key || next[idx - 1]?.key || next[0]?.key || '';
+              return nextKey;
+          });
+
+          return next;
+      });
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <style>{`
+        .query-result-tabs {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .query-result-tabs .ant-tabs-nav {
+          flex: 0 0 auto;
+        }
+        .query-result-tabs .ant-tabs-content-holder {
+          flex: 1 1 auto;
+          overflow: hidden;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .query-result-tabs .ant-tabs-content {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .query-result-tabs .ant-tabs-tabpane {
+          flex: 1 1 auto;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .query-result-tabs .ant-tabs-tabpane > div {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .query-result-tabs .ant-tabs-tabpane-hidden {
+          display: none !important;
+        }
+        .query-result-tabs .ant-tabs-ink-bar {
+          transition: none !important;
+        }
+      `}</style>
       <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
         <Select 
             style={{ width: 150 }} 
@@ -393,18 +636,55 @@ const QueryEditor: React.FC<{ tab: TabData }> = ({ tab }) => {
         title="拖动调整高度"
       />
 
-      <div style={{ flex: 1, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
-         <DataGrid
-            data={results}
-            columnNames={columnNames}
-            loading={loading}
-            tableName={targetTableName} // Pass table name only if detection succeeded
-            dbName={currentDb}
-            connectionId={currentConnectionId}
-            pkColumns={pkColumns}
-            onReload={handleRun}
-            readOnly={!targetTableName} // Read-only if not a simple table query
-         />
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column' }}>
+        {resultSets.length > 0 ? (
+          <Tabs
+              className="query-result-tabs"
+              activeKey={activeResultKey || resultSets[0]?.key}
+              onChange={setActiveResultKey}
+              animated={false}
+              style={{ flex: 1, minHeight: 0 }}
+              items={resultSets.map((rs, idx) => ({
+                  key: rs.key,
+                  label: (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Tooltip title={rs.sql}>
+                              <span>{`结果 ${idx + 1}${Array.isArray(rs.rows) ? ` (${rs.rows.length})` : ''}`}</span>
+                          </Tooltip>
+                          <Tooltip title="关闭结果">
+                              <span
+                                  onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleCloseResult(rs.key);
+                                  }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', color: '#999', cursor: 'pointer' }}
+                              >
+                                  <CloseOutlined style={{ fontSize: 12 }} />
+                              </span>
+                          </Tooltip>
+                      </div>
+                  ),
+                  children: (
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                          <DataGrid
+                              data={rs.rows}
+                              columnNames={rs.columns}
+                              loading={loading}
+                              tableName={rs.tableName}
+                              dbName={currentDb}
+                              connectionId={currentConnectionId}
+                              pkColumns={rs.pkColumns}
+                              onReload={handleRun}
+                              readOnly={rs.readOnly}
+                          />
+                      </div>
+                  )
+              }))}
+          />
+        ) : (
+          <div style={{ flex: 1, minHeight: 0 }} />
+        )}
       </div>
 
       <Modal 
