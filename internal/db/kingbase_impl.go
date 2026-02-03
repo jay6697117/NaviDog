@@ -154,7 +154,11 @@ func (k *KingbaseDB) Query(query string) ([]map[string]interface{}, []string, er
 			val := values[i]
 			b, ok := val.([]byte)
 			if ok {
-				v = string(b)
+				if b == nil {
+					v = nil
+				} else {
+					v = string(b)
+				}
 			} else {
 				v = val
 			}
@@ -193,15 +197,14 @@ func (k *KingbaseDB) GetDatabases() ([]string, error) {
 }
 
 func (k *KingbaseDB) GetTables(dbName string) ([]string, error) {
-	// Usually restricted to current database connection in PG/Kingbase
-	// dbName param is often Schema in PG context, or ignored if we are connected to a specific DB.
-	// But in PG, cross-database queries are not standard without dblink.
-	// We assume dbName here might mean Schema (public, etc.)
-
-	query := "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
-	if dbName != "" && dbName != "public" {
-		query = fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'", dbName)
-	}
+	// Kingbase: tables are scoped by the current DB connection; include schema to avoid search_path issues.
+	query := `
+		SELECT table_schema AS schemaname, table_name AS tablename
+		FROM information_schema.tables
+		WHERE table_type = 'BASE TABLE'
+		  AND table_schema NOT IN ('pg_catalog', 'information_schema')
+		  AND table_schema NOT LIKE 'pg_%'
+		ORDER BY table_schema, table_name`
 
 	data, _, err := k.Query(query)
 	if err != nil {
@@ -210,6 +213,12 @@ func (k *KingbaseDB) GetTables(dbName string) ([]string, error) {
 
 	var tables []string
 	for _, row := range data {
+		schema, okSchema := row["schemaname"]
+		name, okName := row["tablename"]
+		if okSchema && okName {
+			tables = append(tables, fmt.Sprintf("%v.%v", schema, name))
+			continue
+		}
 		if val, ok := row["table_name"]; ok {
 			tables = append(tables, fmt.Sprintf("%v", val))
 		}

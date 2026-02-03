@@ -112,7 +112,11 @@ rows, err := p.conn.Query(query)
 			val := values[i]
 			b, ok := val.([]byte)
 			if ok {
-				v = string(b)
+				if b == nil {
+					v = nil
+				} else {
+					v = string(b)
+				}
 			} else {
 				v = val
 			}
@@ -150,7 +154,7 @@ func (p *PostgresDB) GetDatabases() ([]string, error) {
 }
 
 func (p *PostgresDB) GetTables(dbName string) ([]string, error) {
-	query := "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'"
+	query := "SELECT schemaname, tablename FROM pg_catalog.pg_tables WHERE schemaname != 'information_schema' AND schemaname NOT LIKE 'pg_%' ORDER BY schemaname, tablename"
 	data, _, err := p.Query(query)
 	if err != nil {
 		return nil, err
@@ -158,8 +162,14 @@ func (p *PostgresDB) GetTables(dbName string) ([]string, error) {
 	
 	var tables []string
 	for _, row := range data {
-		if val, ok := row["tablename"]; ok {
-			tables = append(tables, fmt.Sprintf("%v", val))
+		schema, okSchema := row["schemaname"]
+		name, okName := row["tablename"]
+		if okSchema && okName {
+			tables = append(tables, fmt.Sprintf("%v.%v", schema, name))
+			continue
+		}
+		if okName {
+			tables = append(tables, fmt.Sprintf("%v", name))
 		}
 	}
 	return tables, nil

@@ -41,10 +41,17 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
         ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
     };
 
-    const quoteIdent = (ident: string) => {
+    const quoteIdentPart = (ident: string) => {
         if (!ident) return ident;
         if (config.type === 'mysql') return `\`${ident.replace(/`/g, '``')}\``;
         return `"${ident.replace(/"/g, '""')}"`;
+    };
+    const quoteQualifiedIdent = (ident: string) => {
+        const raw = (ident || '').trim();
+        if (!raw) return raw;
+        const parts = raw.split('.').filter(Boolean);
+        if (parts.length <= 1) return quoteIdentPart(raw);
+        return parts.map(quoteIdentPart).join('.');
     };
     const escapeLiteral = (val: string) => val.replace(/'/g, "''");
 
@@ -55,19 +62,19 @@ const DataViewer: React.FC<{ tab: TabData }> = ({ tab }) => {
     filterConditions.forEach(cond => {
         if (cond.column && cond.value) {
             if (cond.op === 'LIKE') {
-                whereParts.push(`${quoteIdent(cond.column)} LIKE '%${escapeLiteral(cond.value)}%'`);
+                whereParts.push(`${quoteIdentPart(cond.column)} LIKE '%${escapeLiteral(cond.value)}%'`);
             } else {
-                whereParts.push(`${quoteIdent(cond.column)} ${cond.op} '${escapeLiteral(cond.value)}'`);
+                whereParts.push(`${quoteIdentPart(cond.column)} ${cond.op} '${escapeLiteral(cond.value)}'`);
             }
         }
     });
     const whereSQL = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : "";
 
-    const countSql = `SELECT COUNT(*) as total FROM ${quoteIdent(tableName)} ${whereSQL}`;
+    const countSql = `SELECT COUNT(*) as total FROM ${quoteQualifiedIdent(tableName)} ${whereSQL}`;
     
-    let sql = `SELECT * FROM ${quoteIdent(tableName)} ${whereSQL}`;
+    let sql = `SELECT * FROM ${quoteQualifiedIdent(tableName)} ${whereSQL}`;
     if (sortInfo && sortInfo.order) {
-        sql += ` ORDER BY ${quoteIdent(sortInfo.columnKey)} ${sortInfo.order === 'ascend' ? 'ASC' : 'DESC'}`;
+        sql += ` ORDER BY ${quoteIdentPart(sortInfo.columnKey)} ${sortInfo.order === 'ascend' ? 'ASC' : 'DESC'}`;
     }
     const offset = (page - 1) * size;
     sql += ` LIMIT ${size} OFFSET ${offset}`;

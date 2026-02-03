@@ -92,7 +92,11 @@ func (c *CustomDB) Query(query string) ([]map[string]interface{}, []string, erro
 			val := values[i]
 			b, ok := val.([]byte)
 			if ok {
-				v = string(b)
+				if b == nil {
+					v = nil
+				} else {
+					v = string(b)
+				}
 			} else {
 				v = val
 			}
@@ -136,13 +140,22 @@ func (c *CustomDB) GetTables(dbName string) ([]string, error) {
 			query = fmt.Sprintf("SHOW TABLES FROM `%s`", dbName)
 		}
 	} else if c.driver == "postgres" || c.driver == "kingbase" {
-		if dbName != "" && dbName != "public" {
-			query = fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'", dbName)
+		query = `
+			SELECT table_schema AS schemaname, table_name AS tablename
+			FROM information_schema.tables
+			WHERE table_type = 'BASE TABLE'
+			  AND table_schema NOT IN ('pg_catalog', 'information_schema')`
+		if dbName != "" {
+			query += fmt.Sprintf(" AND table_schema = '%s'", dbName)
 		}
+		query += " ORDER BY table_schema, table_name"
 	} else if c.driver == "sqlite" {
 		query = "SELECT name FROM sqlite_master WHERE type='table'"
 	} else if c.driver == "oracle" || c.driver == "dm" {
 		query = "SELECT table_name FROM user_tables"
+		if dbName != "" {
+			query = fmt.Sprintf("SELECT owner, table_name FROM all_tables WHERE owner = '%s' ORDER BY table_name", strings.ToUpper(dbName))
+		}
 	}
 
 	// Fallback generic execution
@@ -153,6 +166,18 @@ func (c *CustomDB) GetTables(dbName string) ([]string, error) {
 
 	var tables []string
 	for _, row := range data {
+		if schema, okSchema := row["schemaname"]; okSchema {
+			if name, okName := row["tablename"]; okName {
+				tables = append(tables, fmt.Sprintf("%v.%v", schema, name))
+				continue
+			}
+		}
+		if owner, okOwner := row["OWNER"]; okOwner {
+			if name, okName := row["TABLE_NAME"]; okName {
+				tables = append(tables, fmt.Sprintf("%v.%v", owner, name))
+				continue
+			}
+		}
 		// iterate keys to find likely column
 		for k, v := range row {
 			if strings.Contains(strings.ToLower(k), "name") || strings.Contains(strings.ToLower(k), "table") {
