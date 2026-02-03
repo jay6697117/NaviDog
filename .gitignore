@@ -17,3 +17,5 @@ dist/
 GoNavi-Wails
 GoNavi-Wails.exe
 .ace-tool/
+
+.worktrees/
