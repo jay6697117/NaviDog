@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Input, InputNumber, Button, message, Checkbox, Divider, Select, Alert, Card, Row, Col, Typography, Collapse } from 'antd';
 import { DatabaseOutlined, ConsoleSqlOutlined, FileTextOutlined, CloudServerOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import { useStore } from '../store';
-import { MySQLConnect, MySQLGetDatabases } from '../../wailsjs/go/app/App';
+import { DBConnect, DBGetDatabases, TestConnection } from '../../wailsjs/go/app/App';
 import { SavedConnection } from '../types';
 
 const { Meta } = Card;
@@ -64,7 +64,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
       
       const config = await buildConfig(values);
       
-      const res = await MySQLConnect(config as any);
+      const res = await DBConnect(config as any);
       setLoading(false);
       
       if (res.success) {
@@ -102,11 +102,11 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
           setLoading(true);
           setTestResult(null);
           const config = await buildConfig(values);
-          const res = await (window as any).go.app.App.TestConnection(config);
+          const res = await TestConnection(config as any);
           setLoading(false);
           if (res.success) {
               setTestResult({ type: 'success', message: res.message });
-              const dbRes = await MySQLGetDatabases(config as any);
+              const dbRes = await DBGetDatabases(config as any);
               if (dbRes.success) {
                   const dbs = (dbRes.data as any[]).map((row: any) => row.Database || row.database);
                   setDbList(dbs);
