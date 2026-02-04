@@ -20,20 +20,24 @@ export const useTopologyData = () => {
     const [nodes, setNodes] = useState<TopologyNode[]>([]);
     const [links, setLinks] = useState<TopologyLink[]>([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!activeContext) {
             setNodes([]);
             setLinks([]);
+            setError(null);
             return;
         }
 
         const fetchData = async () => {
             setLoading(true);
+            setError(null);
             const { connectionId, dbName } = activeContext;
             const conn = connections.find(c => c.id === connectionId);
 
             if (!conn) {
+                setError('Connection not found');
                 setLoading(false);
                 return;
             }
@@ -150,6 +154,8 @@ export const useTopologyData = () => {
             } catch (err) {
                 console.error("Topology fetch failed", err);
                 // Fallback to empty so it doesn't break
+                const message = err instanceof Error ? err.message : 'Unknown error';
+                setError(message);
                 setNodes([]);
                 setLinks([]);
             } finally {
@@ -160,5 +166,5 @@ export const useTopologyData = () => {
         fetchData();
     }, [activeContext, connections]);
 
-    return { nodes, links, loading };
+    return { nodes, links, loading, error };
 };

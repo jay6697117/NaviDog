@@ -24,12 +24,6 @@ export const SpaceScene: React.FC = () => {
     // ... (rest of code) ...
 
 
-
-        {/* Loading Overlay for Table Mode */}
-        {isTableMode && tableLoading && (
-            // ... (keep existing loading) ...
-
-
     // Layout Logic for Tables
     // Simple spherical distribution for now to avoid complex d3-force in 3D (though that would be better later)
     const tablePositions = useMemo(() => {
