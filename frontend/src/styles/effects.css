@@ -280,3 +280,169 @@
 .tab-closing {
   animation: tab-close 200ms ease-out forwards;
 }
+
+/* ----------------------------------------
+   Glassmorphism Effects
+   ---------------------------------------- */
+
+.glass-effect {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+[data-theme='dark'] .glass-effect {
+  background: rgba(20, 24, 33, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-modal .ant-modal-content {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: var(--shadow-2);
+}
+
+[data-theme='dark'] .glass-modal .ant-modal-content {
+  background: rgba(20, 24, 33, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-dropdown .ant-dropdown-menu {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+[data-theme='dark'] .glass-dropdown .ant-dropdown-menu {
+  background: rgba(20, 24, 33, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ----------------------------------------
+   Sidebar Decorations
+   ---------------------------------------- */
+
+.sidebar-header-glow {
+  position: relative;
+}
+
+.sidebar-header-glow::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 60px;
+  background: radial-gradient(ellipse, rgba(24, 144, 255, 0.15), transparent);
+  filter: blur(20px);
+  pointer-events: none;
+}
+
+.connection-active-indicator {
+  position: relative;
+}
+
+.connection-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: linear-gradient(180deg, #1890ff, #722ed1);
+  border-radius: 0 2px 2px 0;
+}
+
+.sidebar-collapsing {
+  transform-origin: left center;
+  animation: sidebar-flip 400ms ease-out forwards;
+}
+
+.sidebar-expanding {
+  transform-origin: left center;
+  animation: sidebar-flip-in 400ms ease-out forwards;
+}
+
+/* ----------------------------------------
+   Custom Scrollbar
+   ---------------------------------------- */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* ----------------------------------------
+   Modal 3D Animations
+   ---------------------------------------- */
+
+.modal-3d-enter .ant-modal-content {
+  animation: modal-fly-in 350ms ease-out forwards;
+}
+
+.modal-3d-exit .ant-modal-content {
+  animation: modal-fly-out 250ms ease-in forwards;
+}
+
+.modal-3d-enter .ant-modal-mask {
+  animation: fadeIn 350ms ease-out;
+}
+
+.modal-3d-exit .ant-modal-mask {
+  animation: fadeOut 250ms ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
