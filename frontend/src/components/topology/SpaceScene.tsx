@@ -144,8 +144,25 @@ export const SpaceScene: React.FC = () => {
 
         {/* Loading Overlay for Table Mode */}
         {isTableMode && tableLoading && (
-            <div style={{ position: 'absolute', top: 20, left: 20, color: '#fff' }}>
-                Loading Tables...
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 10,
+                color: '#1890ff',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                flexDirection: 'column',
+                gap: 10
+            }}>
+                <Spin size="large" />
+                <div>Loading Table Galaxy...</div>
             </div>
         )}
         </div>

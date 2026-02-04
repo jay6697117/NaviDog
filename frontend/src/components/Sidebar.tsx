@@ -304,8 +304,15 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       const { type, dataRef, key, title } = info.node;
 
       // Update active context
+      // Update active context
       if (type === 'connection') {
-          setActiveContext({ connectionId: key, dbName: '' });
+          // For SQLite, the "database" logic is fuzzy. Often just 1 DB.
+          // We set dbName to '' by default, but if it's SQLite, useTopologyData needs to know valid context.
+          // However, DBGetTables for SQLite ignores dbName usually.
+          // Let's rely on useTopologyData handling empty dbName if needed, OR pass 'main' which is default for SQLite.
+          const conn = dataRef;
+          const defaultDb = conn.config.type === 'sqlite' ? 'main' : '';
+          setActiveContext({ connectionId: key as string, dbName: defaultDb });
       } else if (type === 'database') {
           setActiveContext({ connectionId: dataRef.id, dbName: title });
       } else if (type === 'table') {
