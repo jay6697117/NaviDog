@@ -1,7 +1,7 @@
 import React, { useState, Suspense } from 'react';
 import { Button, Tooltip, Spin, Space } from 'antd';
 import { ApartmentOutlined, UnorderedListOutlined, FullscreenOutlined, FullscreenExitOutlined } from '@ant-design/icons';
-import { SpaceScene } from './SpaceScene';
+import { TopologyDiagram } from './TopologyDiagram';
 import Sidebar from '../Sidebar';
 import { SavedConnection } from '../../types';
 
@@ -43,7 +43,9 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ onEditConnection, on
           <Sidebar onEditConnection={onEditConnection} />
         ) : (
           <Suspense fallback={<div className="topology-loading"><Spin tip="加载 3D 场景..." /></div>}>
-            <SpaceScene />
+import { TopologyDiagram } from './TopologyDiagram';
+// ...
+            <TopologyDiagram />
           </Suspense>
         )}
       </div>
