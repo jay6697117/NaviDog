@@ -3,6 +3,7 @@ import { Layout, Button, ConfigProvider, Dropdown, MenuProps, message } from 'an
 import zhCN from 'antd/locale/zh_CN';
 import { PlusOutlined, BulbOutlined, BulbFilled, ConsoleSqlOutlined, BugOutlined, SettingOutlined, UploadOutlined, DownloadOutlined } from '@ant-design/icons';
 import Sidebar from './components/Sidebar';
+import { TopologyView } from './components/topology';
 import TabManager from './components/TabManager';
 import ConnectionModal from './components/ConnectionModal';
 import DataSyncModal from './components/DataSyncModal';
@@ -247,7 +248,7 @@ function App() {
                 </div>
                 
                 <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <Sidebar onEditConnection={handleEditConnection} />
+                    <TopologyView onEditConnection={handleEditConnection} />
                 </div>
 
                 {/* Sidebar Footer for Log Toggle */}
