@@ -1,0 +1,157 @@
+/* ========================================
+   GoNavi UI Effects Stylesheet
+   ======================================== */
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ----------------------------------------
+   Animation Keyframes
+   ---------------------------------------- */
+
+/* Ripple effect */
+@keyframes ripple {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Success flash */
+@keyframes success-flash {
+  0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+  50% { box-shadow: inset 0 0 0 2px #52c41a; }
+}
+
+/* Error shake */
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* Shimmer for skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Pulse alive for connection status */
+@keyframes pulse-alive {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+/* Pulse dot for executing state */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* Progress indeterminate */
+@keyframes progress-indeterminate {
+  0% { left: -30%; width: 30%; }
+  50% { left: 50%; width: 30%; }
+  100% { left: 100%; width: 30%; }
+}
+
+/* Heartbeat */
+@keyframes heartbeat {
+  0%, 90%, 100% { transform: scale(1); }
+  95% { transform: scale(1.15); }
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Pulse glow */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(24, 144, 255, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(24, 144, 255, 0); }
+}
+
+/* Cell saved */
+@keyframes cell-saved {
+  0% { background: rgba(82, 196, 26, 0.3); }
+  100% { background: transparent; }
+}
+
+/* Row delete */
+@keyframes row-delete {
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+    height: 0;
+    padding: 0;
+    margin: 0;
+  }
+}
+
+/* Row insert */
+@keyframes row-insert {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+    background: rgba(24, 144, 255, 0.1);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    background: transparent;
+  }
+}
+
+/* Tab close */
+@keyframes tab-close {
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+}
+
+/* Modal fly in */
+@keyframes modal-fly-in {
+  0% {
+    transform: perspective(1000px) translateZ(-300px) rotateX(15deg);
+    opacity: 0;
+  }
+  100% {
+    transform: perspective(1000px) translateZ(0) rotateX(0);
+    opacity: 1;
+  }
+}
+
+/* Modal fly out */
+@keyframes modal-fly-out {
+  to {
+    transform: perspective(1000px) translateZ(-200px) rotateX(-10deg);
+    opacity: 0;
+  }
+}
+
+/* Sidebar flip */
+@keyframes sidebar-flip {
+  0% { transform: perspective(1000px) rotateY(0); opacity: 1; }
+  100% { transform: perspective(1000px) rotateY(-90deg); opacity: 0; width: 0; }
+}
+
+@keyframes sidebar-flip-in {
+  0% { transform: perspective(1000px) rotateY(-90deg); opacity: 0; }
+  100% { transform: perspective(1000px) rotateY(0); opacity: 1; }
+}
+
+/* Spin */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
