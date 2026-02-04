@@ -4,6 +4,7 @@ import { DatabaseOutlined, ConsoleSqlOutlined, FileTextOutlined, CloudServerOutl
 import { useStore } from '../store';
 import { DBConnect, DBGetDatabases, TestConnection } from '../../wailsjs/go/app/App';
 import { SavedConnection } from '../types';
+import { RippleButton } from './effects';
 
 const { Meta } = Card;
 const { Text } = Typography;
@@ -61,12 +62,12 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
     try {
       const values = await form.validateFields();
       setLoading(true);
-      
+
       const config = await buildConfig(values);
-      
+
       const res = await DBConnect(config as any);
       setLoading(false);
-      
+
       if (res.success) {
         const newConn = {
           id: initialValues ? initialValues.id : Date.now().toString(),
@@ -82,7 +83,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
             addConnection(newConn);
             message.success('连接已保存！');
         }
-        
+
         form.resetFields();
         setUseSSH(false);
         setDbType('mysql');
@@ -128,7 +129,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
           keyPath: values.sshKeyPath || ""
       } : { host: "", port: 22, user: "", password: "", keyPath: "" };
 
-      return { 
+      return {
           type: values.type,
           host: values.host || "",
           port: Number(values.port || 0),
@@ -146,7 +147,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
   const handleTypeSelect = (type: string) => {
       setDbType(type);
       form.setFieldsValue({ type: type });
-      
+
       // Auto-fill default port
       let defaultPort = 3306;
       switch (type) {
@@ -181,8 +182,8 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
       <Row gutter={[16, 16]}>
           {dbTypes.map(item => (
               <Col span={8} key={item.key}>
-                  <Card 
-                      hoverable 
+                  <Card
+                      hoverable
                       onClick={() => handleTypeSelect(item.key)}
                       style={{ textAlign: 'center', cursor: 'pointer' }}
                   >
@@ -195,9 +196,9 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
   );
 
   const renderStep2 = () => (
-      <Form 
-        form={form} 
-        layout="vertical" 
+      <Form
+        form={form}
+        layout="vertical"
         initialValues={{ type: 'mysql', host: 'localhost', port: 3306, user: 'root', useSSH: false, sshPort: 22, timeout: 30 }}
         onValuesChange={(changed) => {
             if (testResult) setTestResult(null); // Clear result on change
@@ -212,7 +213,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         <Form.Item name="name" label="连接名称">
             <Input placeholder="例如：本地测试库" />
         </Form.Item>
-        
+
         {isCustom ? (
             <>
                 <Form.Item name="driver" label="驱动名称 (Driver Name)" rules={[{ required: true, message: '请输入驱动名称' }]} help="已支持: mysql, postgres, sqlite, oracle, dm, kingbase">
@@ -245,7 +246,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
             </Form.Item>
         </div>
         )}
-        
+
         {!isSqlite && (
         <Form.Item name="includeDatabases" label="显示数据库 (留空显示全部)" help="连接测试成功后可选择">
             <Select mode="multiple" placeholder="选择显示的数据库" allowClear>
@@ -286,16 +287,16 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
             )}
 
             <Divider style={{ margin: '12px 0' }} />
-            
-            <Collapse 
-                ghost 
+
+            <Collapse
+                ghost
                 items={[{
                     key: 'advanced',
                     label: '高级连接',
                     children: (
-                        <Form.Item 
-                            name="timeout" 
-                            label="连接超时 (秒)" 
+                        <Form.Item
+                            name="timeout"
+                            label="连接超时 (秒)"
                             help="数据库连接超时时间，默认 30 秒"
                             rules={[{ type: 'number', min: 1, max: 300, message: '超时时间范围: 1-300 秒' }]}
                         >
@@ -308,7 +309,7 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
         )}
         </>
         )}
-        
+
         {testResult && (
           <Alert
               message={testResult.message}
@@ -323,14 +324,14 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
   const getFooter = () => {
       if (step === 1) {
           return [
-             <Button key="cancel" onClick={onClose}>取消</Button>
+             <RippleButton key="cancel" onClick={onClose}>取消</RippleButton>
           ];
       }
       return [
-          !initialValues && <Button key="back" onClick={() => setStep(1)} style={{ float: 'left' }}>上一步</Button>,
-          <Button key="test" loading={loading} onClick={handleTest}>测试连接</Button>,
-          <Button key="cancel" onClick={onClose}>取消</Button>,
-          <Button key="submit" type="primary" loading={loading} onClick={handleOk}>保存</Button>
+          !initialValues && <RippleButton key="back" onClick={() => setStep(1)} style={{ float: 'left' }}>上一步</RippleButton>,
+          <RippleButton key="test" loading={loading} onClick={handleTest}>测试连接</RippleButton>,
+          <RippleButton key="cancel" onClick={onClose}>取消</RippleButton>,
+          <RippleButton key="submit" type="primary" loading={loading} onClick={handleOk}>保存</RippleButton>
       ];
   };
 
@@ -341,15 +342,16 @@ const ConnectionModal: React.FC<{ open: boolean; onClose: () => void; initialVal
   };
 
   return (
-    <Modal 
+    <Modal
         title={getTitle()}
-        open={open} 
-        onCancel={onClose} 
+        open={open}
+        onCancel={onClose}
         footer={getFooter()}
         width={step === 1 ? 700 : 600}
-        zIndex={10001} 
-        destroyOnHidden 
+        zIndex={10001}
+        destroyOnHidden
         maskClosable={false}
+        wrapClassName="glass-modal"
     >
       {step === 1 ? renderStep1() : renderStep2()}
     </Modal>

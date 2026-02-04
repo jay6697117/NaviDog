@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Table, Tag, Button, Tooltip } from 'antd';
 import { ClearOutlined, CloseOutlined, CaretRightOutlined, BugOutlined } from '@ant-design/icons';
 import { useStore } from '../store';
+import { RippleButton } from './effects';
 
 interface LogPanelProps {
     height: number;
@@ -11,6 +12,9 @@ interface LogPanelProps {
 
 const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) => {
     const { sqlLogs, clearSqlLogs, darkMode } = useStore();
+
+    // Calculate max duration for timeline normalization
+    const maxDuration = Math.max(...sqlLogs.map(l => l.duration || 0), 100);
 
     const columns = [
         {
@@ -30,10 +34,28 @@ const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) =
             )
         },
         {
-            title: 'Duration',
+            title: 'Duration (Timeline)',
             dataIndex: 'duration',
-            width: 70,
-            render: (d: number) => <span style={{ color: d > 1000 ? 'orange' : 'inherit', fontSize: '12px' }}>{d}ms</span>
+            width: 200, // Increased width for timeline
+            render: (d: number) => {
+                const percentage = Math.min((d / maxDuration) * 100, 100);
+                const color = d > 1000 ? '#ff4d4f' : (d > 200 ? '#faad14' : '#52c41a');
+
+                return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                        <span style={{ width: 45, fontSize: '12px', textAlign: 'right', flexShrink: 0 }}>{d}ms</span>
+                        <div style={{ flex: 1, height: 6, background: darkMode ? '#333' : '#f0f0f0', borderRadius: 3, overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+                            <div style={{
+                                width: `${percentage}%`,
+                                height: '100%',
+                                background: color,
+                                borderRadius: 3,
+                                transition: 'width 0.3s ease-out'
+                            }} />
+                        </div>
+                    </div>
+                );
+            }
         },
         {
             title: 'SQL / Message',
@@ -49,9 +71,9 @@ const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) =
     ];
 
     return (
-        <div style={{ 
-            height, 
-            borderTop: darkMode ? '1px solid #303030' : '1px solid #d9d9d9', 
+        <div style={{
+            height,
+            borderTop: darkMode ? '1px solid #303030' : '1px solid #d9d9d9',
             background: darkMode ? '#1f1f1f' : '#fff',
             display: 'flex',
             flexDirection: 'column',
@@ -59,7 +81,7 @@ const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) =
             zIndex: 100 // Ensure above other content
         }}>
             {/* Resize Handle */}
-            <div 
+            <div
                 onMouseDown={onResizeStart}
                 style={{
                     position: 'absolute',
@@ -73,8 +95,8 @@ const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) =
             />
 
             {/* Toolbar */}
-            <div style={{ 
-                padding: '4px 8px', 
+            <div style={{
+                padding: '4px 8px',
                 borderBottom: darkMode ? '1px solid #303030' : '1px solid #f0f0f0',
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -87,24 +109,25 @@ const LogPanel: React.FC<LogPanelProps> = ({ height, onClose, onResizeStart }) =
                 </div>
                 <div>
                     <Tooltip title="清空日志">
-                        <Button type="text" size="small" icon={<ClearOutlined />} onClick={clearSqlLogs} />
+                        <RippleButton type="text" size="small" icon={<ClearOutlined />} onClick={clearSqlLogs} />
                     </Tooltip>
                     <Tooltip title="关闭面板">
-                        <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
+                        <RippleButton type="text" size="small" icon={<CloseOutlined />} onClick={onClose} />
                     </Tooltip>
                 </div>
             </div>
 
             {/* List */}
             <div style={{ flex: 1, overflow: 'auto' }}>
-                <Table 
-                    dataSource={sqlLogs} 
-                    columns={columns} 
-                    size="small" 
-                    pagination={false} 
+                <Table
+                    dataSource={sqlLogs}
+                    columns={columns}
+                    size="small"
+                    pagination={false}
                     rowKey="id"
-                    showHeader={false}
-                    // scroll={{ y: height - 32 }} // Let flex handle it
+                    showHeader={true} // Changed to true to show headers like "Duration"
+                    sticky
+                    scroll={{ x: 'max-content' }}
                 />
             </div>
         </div>

@@ -5,6 +5,7 @@ import { ReloadOutlined, ImportOutlined, ExportOutlined, DownOutlined, PlusOutli
 import { ImportData, ExportTable, ExportData, ApplyChanges } from '../../wailsjs/go/app/App';
 import { useStore } from '../store';
 import { v4 as uuidv4 } from 'uuid';
+import { TableSkeleton } from './effects'; // Imported TableSkeleton
 import 'react-resizable/css/styles.css';
 
 // 内部行标识字段：避免与真实业务字段（如 `key` 列）冲突。
@@ -17,12 +18,30 @@ const normalizeDateTimeString = (val: string) => {
     return `${match[1]} ${match[2]}`;
 };
 
-// --- Helper: Format Value ---
+// --- Helper: Format Value & Heatmap ---
 const formatCellValue = (val: any) => {
     if (val === null) return <span style={{ color: '#ccc' }}>NULL</span>;
     if (typeof val === 'object') return JSON.stringify(val);
     if (typeof val === 'string') {
-        return normalizeDateTimeString(val);
+        const str = normalizeDateTimeString(val);
+        // Heatmap Logic: Darker background for longer strings
+        // Just a visual cue, not overwhelming
+        const len = str.length;
+        if (len > 20) { // Only apply to somewhat long strings
+             const opacity = Math.min((len - 20) / 200, 0.15); // Max 15% opacity
+             return (
+                <div style={{
+                    background: `rgba(24, 144, 255, ${opacity})`,
+                    padding: '0 4px',
+                    borderRadius: 2,
+                    display: 'inline-block',
+                    width: '100%'
+                }}>
+                    {str}
+                </div>
+             );
+        }
+        return str;
     }
     return String(val);
 };
@@ -144,7 +163,7 @@ const EditableCell: React.FC<EditableCellProps> = React.memo(({
 
 const ContextMenuRow = React.memo(({ children, record, ...props }: any) => {
     const context = useContext(DataContext);
-    
+
     if (!record || !context) return <tr {...props}>{children}</tr>;
 
     const { selectedRowKeysRef, displayDataRef, handleCopyInsert, handleCopyJson, handleCopyCsv, handleExportSelected, copyToClipboard } = context;
@@ -159,15 +178,15 @@ const ContextMenuRow = React.memo(({ children, record, ...props }: any) => {
     };
 
     const menuItems: MenuProps['items'] = [
-        { 
-            key: 'insert', 
-            label: `复制为 INSERT`, 
-            icon: <ConsoleSqlOutlined />, 
-            onClick: () => handleCopyInsert(record) 
+        {
+            key: 'insert',
+            label: `复制为 INSERT`,
+            icon: <ConsoleSqlOutlined />,
+            onClick: () => handleCopyInsert(record)
         },
         { key: 'json', label: '复制为 JSON', icon: <FileTextOutlined />, onClick: () => handleCopyJson(record) },
         { key: 'csv', label: '复制为 CSV', icon: <FileTextOutlined />, onClick: () => handleCopyCsv(record) },
-        { key: 'copy', label: '复制为 Markdown', icon: <CopyOutlined />, onClick: () => { 
+        { key: 'copy', label: '复制为 Markdown', icon: <CopyOutlined />, onClick: () => {
             const records = getTargets();
             const lines = records.map((r: any) => {
                 const { [GONAVI_ROW_KEY]: _rowKey, ...vals } = r;
@@ -215,7 +234,7 @@ interface DataGridProps {
     onApplyFilter?: (conditions: any[]) => void;
 }
 
-const DataGrid: React.FC<DataGridProps> = ({ 
+const DataGrid: React.FC<DataGridProps> = ({
     data, columnNames, loading, tableName, dbName, connectionId, pkColumns = [], readOnly = false,
     onReload, onSort, onPageChange, pagination, showFilter, onToggleFilter, onApplyFilter
 }) => {
@@ -224,7 +243,7 @@ const DataGrid: React.FC<DataGridProps> = ({
   const [form] = Form.useForm();
   const [modal, contextHolder] = Modal.useModal();
   const gridId = useMemo(() => `grid-${uuidv4()}`, []);
-  
+
   // Helper to export specific data
   const exportData = async (rows: any[], format: string) => {
       const hide = message.loading(`正在导出 ${rows.length} 条数据...`, 0);
@@ -234,10 +253,10 @@ const DataGrid: React.FC<DataGridProps> = ({
       hide();
       if (res.success) { message.success("导出成功"); } else if (res.message !== "Cancelled") { message.error("导出失败: " + res.message); }
   };
-  
+
   const [sortInfo, setSortInfo] = useState<{ columnKey: string, order: string } | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
-  
+
   // Dynamic Height
   const [tableHeight, setTableHeight] = useState(500);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -345,54 +364,54 @@ const DataGrid: React.FC<DataGridProps> = ({
         const relativeLeft = latestClientXRef.current - draggingRef.current.containerLeft;
         ghostRef.current.style.transform = `translateX(${relativeLeft}px)`;
     }, []);
-  
+
         // 1. Drag Start
-  
+
         const handleResizeStart = useCallback((key: string) => (e: React.MouseEvent) => {
-  
-            e.preventDefault(); 
-  
-            e.stopPropagation(); 
-  
-            
-  
+
+            e.preventDefault();
+
+            e.stopPropagation();
+
+
+
             isResizingRef.current = true; // Engage lock
-  
-      
-  
+
+
+
             const startX = e.clientX;
-  
-            const currentWidth = columnWidths[key] || 200; 
-  
+
+            const currentWidth = columnWidths[key] || 200;
+
             const containerLeft = containerRef.current?.getBoundingClientRect().left ?? 0;
-  
+
             draggingRef.current = { startX, startWidth: currentWidth, key, containerLeft };
             latestClientXRef.current = startX;
-  
-      
-  
+
+
+
             // Show Ghost Line at initial position
-  
+
             if (ghostRef.current && containerRef.current) {
                 const relativeLeft = startX - containerLeft;
                 ghostRef.current.style.transform = `translateX(${relativeLeft}px)`;
-  
+
                 ghostRef.current.style.display = 'block';
-  
+
             }
-  
-      
-  
+
+
+
             // Add global listeners
-  
+
             document.addEventListener('mousemove', handleResizeMove);
-  
+
             document.addEventListener('mouseup', handleResizeStop);
-  
-            document.body.style.cursor = 'col-resize'; 
-  
-            document.body.style.userSelect = 'none'; 
-  
+
+            document.body.style.cursor = 'col-resize';
+
+            document.body.style.userSelect = 'none';
+
         }, [columnWidths]);
 
   // 2. Drag Move (Global)
@@ -426,7 +445,7 @@ const DataGrid: React.FC<DataGridProps> = ({
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       draggingRef.current = null;
-      
+
       // Release lock after a short delay to block subsequent click events (sorting)
       setTimeout(() => {
           isResizingRef.current = false;
@@ -435,12 +454,12 @@ const DataGrid: React.FC<DataGridProps> = ({
 
   const handleCellSave = useCallback((row: any) => {
       // Optimistic update for display
-      // In parent-controlled data, we might need parent to update 'data', 
+      // In parent-controlled data, we might need parent to update 'data',
       // but here we manage 'modifiedRows' locally and overlay it.
       // Since 'displayData' is derived from 'data' + 'modifiedRows', we need to update the source if it's in 'data'.
       // But 'data' prop is immutable.
       // So we update 'modifiedRows'.
-      
+
       // Check if it's an added row
       const rowKey = row?.[GONAVI_ROW_KEY];
       if (rowKey === undefined) return;
@@ -453,7 +472,7 @@ const DataGrid: React.FC<DataGridProps> = ({
   }, [addedRows]);
 
   // Merge Data for Display
-  // 'displayData' already merges addedRows. 
+  // 'displayData' already merges addedRows.
   // We need to merge modifiedRows into it for rendering.
   const mergedDisplayData = useMemo(() => {
       return displayData.map(row => {
@@ -471,8 +490,8 @@ const DataGrid: React.FC<DataGridProps> = ({
           dataIndex: key,
           key: key,
           ellipsis: true,
-          width: columnWidths[key] || 200, 
-          sorter: !!onSort, 
+          width: columnWidths[key] || 200,
+          sorter: !!onSort,
           sortOrder: (sortInfo?.columnKey === key ? sortInfo.order : null) as SortOrder | undefined,
           editable: !readOnly && !!tableName, // Only editable if table name known
           render: (text: any) => formatCellValue(text),
@@ -500,7 +519,7 @@ const DataGrid: React.FC<DataGridProps> = ({
   const handleAddRow = () => {
       const newKey = `new-${Date.now()}`;
       const newRow: any = { [GONAVI_ROW_KEY]: newKey };
-      columnNames.forEach(col => newRow[col] = ''); 
+      columnNames.forEach(col => newRow[col] = '');
       setAddedRows(prev => [...prev, newRow]);
   };
 
@@ -537,11 +556,11 @@ const DataGrid: React.FC<DataGridProps> = ({
           if (deletedRowKeys.has(keyStr)) return;
           const originalRow = data.find(d => rowKeyStr(d?.[GONAVI_ROW_KEY]) === keyStr);
           if (!originalRow) return; // Should not happen for modified rows unless deleted
-          
+
           const pkData: any = {};
           if (pkColumns.length > 0) pkColumns.forEach(k => pkData[k] = originalRow[k]);
           else { const { [GONAVI_ROW_KEY]: _rowKey, ...rest } = originalRow; Object.assign(pkData, rest); }
-          
+
           const { [GONAVI_ROW_KEY]: _rowKey, ...vals } = newRow;
           updates.push({ keys: pkData, values: vals });
       });
@@ -551,25 +570,25 @@ const DataGrid: React.FC<DataGridProps> = ({
           return;
       }
 
-      const config = { 
-          ...conn.config, 
-          port: Number(conn.config.port), 
-          password: conn.config.password || "", 
-          database: conn.config.database || "", 
-          useSSH: conn.config.useSSH || false, 
-          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" } 
+      const config = {
+          ...conn.config,
+          port: Number(conn.config.port),
+          password: conn.config.password || "",
+          database: conn.config.database || "",
+          useSSH: conn.config.useSSH || false,
+          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
       };
-      
+
       const startTime = Date.now();
       const res = await ApplyChanges(config as any, dbName || '', tableName, { inserts, updates, deletes } as any);
       const duration = Date.now() - startTime;
-      
+
       // Construct a pseudo-SQL representation for the log
       let logSql = `/* Batch Apply on ${tableName} */\n`;
       if (inserts.length > 0) logSql += `INSERT ${inserts.length} rows;\n`;
       if (updates.length > 0) logSql += `UPDATE ${updates.length} rows;\n`;
       if (deletes.length > 0) logSql += `DELETE ${deletes.length} rows;\n`;
-      
+
       if (res.success) {
           addSqlLog({
               id: Date.now().toString(),
@@ -603,7 +622,7 @@ const DataGrid: React.FC<DataGridProps> = ({
       navigator.clipboard.writeText(text);
       message.success("Copied to clipboard");
   }, []);
-  
+
   const getTargets = useCallback((clickedRecord: any) => {
       const selKeys = selectedRowKeysRef.current;
       const currentData = displayDataRef.current;
@@ -619,7 +638,7 @@ const DataGrid: React.FC<DataGridProps> = ({
       const sqls = records.map((r: any) => {
           const { [GONAVI_ROW_KEY]: _rowKey, ...vals } = r;
           const cols = Object.keys(vals);
-          const values = Object.values(vals).map(v => v === null ? 'NULL' : `'${v}'`); 
+          const values = Object.values(vals).map(v => v === null ? 'NULL' : `'${v}'`);
           const targetTable = tableName || 'table';
           return `INSERT INTO \`${targetTable}\` (${cols.map(c => `\`${c}\``).join(', ')}) VALUES (${values.join(', ')});`;
       });
@@ -654,7 +673,7 @@ const DataGrid: React.FC<DataGridProps> = ({
   // Export
   const handleExport = async (format: string) => {
       if (!connectionId || !tableName) return;
-      
+
       // 1. Export Selected
       if (selectedRowKeys.length > 0) {
           const selectedRows = displayData.filter(d => selectedRowKeys.includes(d?.[GONAVI_ROW_KEY]));
@@ -703,7 +722,7 @@ const DataGrid: React.FC<DataGridProps> = ({
       const conn = connections.find(c => c.id === connectionId);
       if (!conn) return;
       const config = { ...conn.config, port: Number(conn.config.port), password: conn.config.password || "", database: conn.config.database || "", useSSH: conn.config.useSSH || false, ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" } };
-      
+
       const res = await ImportData(config as any, dbName || '', tableName);
       if (res.success) { message.success(res.message); if (onReload) onReload(); } else if (res.message !== "Cancelled") { message.error("Import Failed: " + res.message); }
   };
@@ -728,158 +747,154 @@ const DataGrid: React.FC<DataGridProps> = ({
       { key: 'xlsx', label: 'Excel (XLSX)', onClick: () => handleExport('xlsx') },
       { key: 'json', label: 'JSON', onClick: () => handleExport('json') },
       { key: 'md', label: 'Markdown', onClick: () => handleExport('md') },
-  ];
+    ];
 
-  const tableComponents = useMemo(() => ({
-      body: { cell: EditableCell, row: ContextMenuRow },
-      header: { cell: ResizableTitle }
-  }), []); 
+    const tableComponents = useMemo(() => ({
+        body: { cell: EditableCell, row: ContextMenuRow },
+        header: { cell: ResizableTitle }
+    }), []);
 
-  const totalWidth = columns.reduce((sum, col) => sum + (col.width as number || 200), 0);
-  const enableVirtual = mergedDisplayData.length >= 200;
+    const totalWidth = columns.reduce((sum, col) => sum + (col.width as number || 200), 0);
+    const enableVirtual = mergedDisplayData.length >= 200;
 
-  return (
-    <div className={gridId} style={{ flex: '1 1 auto', height: '100%', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {/* Toolbar */}
-        <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center' }}>
-            {onReload && <Button icon={<ReloadOutlined />} onClick={() => {
-                setAddedRows([]);
-                setModifiedRows({});
-               setDeletedRowKeys(new Set());
-               setSelectedRowKeys([]);
-               onReload();
-           }}>刷新</Button>}
-           {tableName && <Button icon={<ImportOutlined />} onClick={handleImport}>导入</Button>}
-           {tableName && <Dropdown menu={{ items: exportMenu }}><Button icon={<ExportOutlined />}>导出 <DownOutlined /></Button></Dropdown>}
-           
-           {!readOnly && tableName && (
-               <>
-                   <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
-                   <Button icon={<PlusOutlined />} onClick={handleAddRow}>添加行</Button>
-                   <Button icon={<DeleteOutlined />} danger disabled={selectedRowKeys.length === 0} onClick={handleDeleteSelected}>删除选中</Button>
-                   {selectedRowKeys.length > 0 && <span style={{ fontSize: '12px', color: '#888' }}>已选 {selectedRowKeys.length}</span>}
-                   <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
-                   <Button icon={<SaveOutlined />} type="primary" disabled={!hasChanges} onClick={handleCommit}>提交事务 ({addedRows.length + Object.keys(modifiedRows).length + deletedRowKeys.size})</Button>
-                   {hasChanges && (<Button icon={<UndoOutlined />} onClick={() => {
-                        setAddedRows([]);
-                        setModifiedRows({});
-                        setDeletedRowKeys(new Set());
-                   }}>回滚</Button>)}
-               </>
-           )}
+    return (
+      <div className={gridId} style={{ flex: '1 1 auto', height: '100%', overflow: 'hidden', padding: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Toolbar */}
+          <div style={{ padding: '8px', borderBottom: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center' }}>
+              {onReload && <Button icon={<ReloadOutlined />} onClick={() => {
+                  setAddedRows([]);
+                  setModifiedRows({});
+                 setDeletedRowKeys(new Set());
+                 setSelectedRowKeys([]);
+                 onReload();
+             }}>刷新</Button>}
+             {tableName && <Button icon={<ImportOutlined />} onClick={handleImport}>导入</Button>}
+             {tableName && <Dropdown menu={{ items: exportMenu }}><Button icon={<ExportOutlined />}>导出 <DownOutlined /></Button></Dropdown>}
 
-           {onToggleFilter && (
-               <>
-                   <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
-                   <Button icon={<FilterOutlined />} type={showFilter ? 'primary' : 'default'} onClick={() => { 
-                       onToggleFilter(); 
-                       if (filterConditions.length === 0 && !showFilter) addFilter(); 
-                   }}>筛选</Button>
-               </>
-           )}
-       </div>
+             {!readOnly && tableName && (
+                 <>
+                     <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
+                     <Button icon={<PlusOutlined />} onClick={handleAddRow}>添加行</Button>
+                     <Button icon={<DeleteOutlined />} danger disabled={selectedRowKeys.length === 0} onClick={handleDeleteSelected}>删除选中</Button>
+                     {selectedRowKeys.length > 0 && <span style={{ fontSize: '12px', color: '#888' }}>已选 {selectedRowKeys.length}</span>}
+                     <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
+                     <Button icon={<SaveOutlined />} type="primary" disabled={!hasChanges} onClick={handleCommit}>提交事务 ({addedRows.length + Object.keys(modifiedRows).length + deletedRowKeys.size})</Button>
+                     {hasChanges && (<Button icon={<UndoOutlined />} onClick={() => {
+                          setAddedRows([]);
+                          setModifiedRows({});
+                          setDeletedRowKeys(new Set());
+                     }}>回滚</Button>)}
+                 </>
+             )}
 
-       {/* Filter Panel */}
-       {showFilter && (
-           <div style={{ padding: '8px', background: '#f5f5f5', borderBottom: '1px solid #eee' }}>
-               {filterConditions.map(cond => (
-                   <div key={cond.id} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                       <Select style={{ width: 150 }} value={cond.column} onChange={v => updateFilter(cond.id, 'column', v)} options={columnNames.map(c => ({ value: c, label: c }))} />
-                       <Select style={{ width: 100 }} value={cond.op} onChange={v => updateFilter(cond.id, 'op', v)} options={[{ value: '=', label: '=' }, { value: 'LIKE', label: '包含' }]} />
-                       <Input style={{ width: 200 }} value={cond.value} onChange={e => updateFilter(cond.id, 'value', e.target.value)} />
-                       <Button icon={<CloseOutlined />} onClick={() => removeFilter(cond.id)} type="text" danger />
-                   </div>
-               ))}
-               <div style={{ display: 'flex', gap: 8 }}>
-                   <Button type="dashed" onClick={addFilter} size="small" icon={<PlusOutlined />}>添加条件</Button>
-                   <Button type="primary" onClick={applyFilters} size="small">应用</Button>
-                   <Button size="small" icon={<ClearOutlined />} onClick={() => {
-                       setFilterConditions([]);
-                       if (onApplyFilter) onApplyFilter([]);
-                   }}>清除</Button>
-               </div>
-           </div>
-       )}
+             {onToggleFilter && (
+                 <>
+                     <div style={{ width: 1, background: '#eee', height: 20, margin: '0 8px' }} />
+                     <Button icon={<FilterOutlined />} type={showFilter ? 'primary' : 'default'} onClick={() => {
+                         onToggleFilter();
+                         if (filterConditions.length === 0 && !showFilter) addFilter();
+                     }}>筛选</Button>
+                 </>
+             )}
+         </div>
 
-       <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
-        {contextHolder}
-        <Form component={false} form={form}>
-            <DataContext.Provider value={{ selectedRowKeysRef, displayDataRef, handleCopyInsert, handleCopyJson, handleCopyCsv, handleExportSelected, copyToClipboard, tableName }}>
-                <EditableContext.Provider value={form}>
-                    <Table 
-                        components={tableComponents}
-                        dataSource={mergedDisplayData} 
-                        columns={mergedColumns} 
-                        size="small" 
-                        scroll={{ x: Math.max(totalWidth, 1000), y: tableHeight }}
-                        virtual={enableVirtual}
-                        loading={loading}
-                        rowKey={GONAVI_ROW_KEY}
-                        pagination={false} 
-                        onChange={handleTableChange}
-                        bordered
-                        rowSelection={{
-                            selectedRowKeys,
-                            onChange: setSelectedRowKeys,
-                        }}
-                        rowClassName={(record) => {
-                            const k = record?.[GONAVI_ROW_KEY];
-                            if (k !== undefined && addedRows.some(r => r?.[GONAVI_ROW_KEY] === k)) return 'row-added';
-                            if (k !== undefined && (modifiedRows[rowKeyStr(k)] || deletedRowKeys.has(rowKeyStr(k)))) return 'row-modified'; // deleted won't show
-                            return '';
-                        }}
-                        onRow={(record) => ({ record } as any)}
-                    />
-                </EditableContext.Provider>
-            </DataContext.Provider>
-        </Form>
-       </div>
-       
-       {pagination && (
-           <div style={{ padding: '8px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', background: '#fff' }}>
-                   <Pagination 
-                   current={pagination.current}
-                   pageSize={pagination.pageSize}
-                   total={pagination.total}
-                   showTotal={(total, range) => {
-                       const currentCount = Math.max(0, range[1] - range[0] + 1);
-                       if (pagination.totalKnown === false) return `当前 ${currentCount} 条 / 正在统计总数...`;
-                       return `当前 ${currentCount} 条 / 共 ${total} 条`;
-                   }}
-                   showSizeChanger
-                   pageSizeOptions={['100', '200', '500', '1000']}
-                   onChange={onPageChange}
-                   size="small"
-               />
-           </div>
-       )}
+         {/* Filter Panel */}
+         {showFilter && (
+             <div style={{ padding: '8px', background: '#f5f5f5', borderBottom: '1px solid #eee' }}>
+                 {filterConditions.map(cond => (
+                     <div key={cond.id} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                         <Select style={{ width: 150 }} value={cond.column} onChange={v => updateFilter(cond.id, 'column', v)} options={columnNames.map(c => ({ value: c, label: c }))} />
+                         <Select style={{ width: 100 }} value={cond.op} onChange={v => updateFilter(cond.id, 'op', v)} options={[{ value: '=', label: '=' }, { value: 'LIKE', label: '包含' }]} />
+                         <Input style={{ width: 200 }} value={cond.value} onChange={e => updateFilter(cond.id, 'value', e.target.value)} />
+                         <Button icon={<CloseOutlined />} onClick={() => removeFilter(cond.id)} type="text" danger />
+                     </div>
+                 ))}
+                 <div style={{ display: 'flex', gap: 8 }}>
+                     <Button type="dashed" onClick={addFilter} size="small" icon={<PlusOutlined />}>添加条件</Button>
+                     <Button type="primary" onClick={applyFilters} size="small">应用</Button>
+                     <Button size="small" icon={<ClearOutlined />} onClick={() => {
+                         setFilterConditions([]);
+                         if (onApplyFilter) onApplyFilter([]);
+                     }}>清除</Button>
+                 </div>
+             </div>
+         )}
 
-        <style>{`
-            .${gridId} .row-added td { background-color: #f6ffed !important; }
-            .${gridId} .row-modified td { background-color: #e6f7ff !important; }
-            .${gridId} .ant-table-body {
-                max-height: ${tableHeight}px !important;
-            }
-        `}</style>
-       
-       {/* Ghost Resize Line for Columns */}
-       <div 
-           ref={ghostRef}
-           style={{
-               position: 'absolute',
-               top: 0,
-               bottom: 0, // Fits container height
-               left: 0,
-               width: '2px',
-               background: '#1890ff',
-               zIndex: 9999,
-               display: 'none',
-               pointerEvents: 'none',
-               willChange: 'transform'
-           }}
-       />
-    </div>
-  );
-};
+         <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+             {/* Loading Skeleton */}
+             {loading && (
+                 <div style={{
+                     position: 'absolute',
+                     top: 0,
+                     left: 0,
+                     right: 0,
+                     bottom: 0,
+                     background: 'rgba(255, 255, 255, 0.7)',
+                     zIndex: 20,
+                     padding: 20
+                 }}>
+                    <TableSkeleton cols={5} rows={8} />
+                 </div>
+             )}
 
-export default React.memo(DataGrid);
+             <EditableContext.Provider value={form}>
+             <DataContext.Provider value={{
+                 selectedRowKeysRef,
+                 displayDataRef,
+                 handleCopyInsert,
+                 handleCopyJson,
+                 handleCopyCsv,
+                 handleExportSelected,
+                 copyToClipboard,
+                 tableName
+             }}>
+                 <Form form={form} component={false}>
+                 <Table
+                     components={tableComponents}
+                     bordered
+                     dataSource={mergedDisplayData}
+                     columns={mergedColumns}
+                     // Use loading prop only if we don't have our custom skeleton (or use both, but native loading spins)
+                     // If we show skeleton overlay, we can set loading={false} to avoid double spinner
+                     loading={false}
+                     rowKey={GONAVI_ROW_KEY}
+                     pagination={pagination ? {
+                         ...pagination,
+                         showSizeChanger: true,
+                         showTotal: (total) => `共 ${total} 条` + (pagination.totalKnown === false ? '+' : ''),
+                         onChange: (page, size) => onPageChange && onPageChange(page, size)
+                     } : false}
+                     scroll={{ x: totalWidth, y: tableHeight }}
+                     size="small"
+                     rowSelection={{
+                         selectedRowKeys,
+                         onChange: (keys) => setSelectedRowKeys(keys)
+                     }}
+                     className="data-grid-table" // Optional class for extra styling
+                 />
+                 </Form>
+             </DataContext.Provider>
+             </EditableContext.Provider>
+
+             {/* Ghost Line for resizing */}
+             <div
+                 ref={ghostRef}
+                 style={{
+                     position: 'absolute',
+                     top: 0,
+                     bottom: 0,
+                     width: 2,
+                     backgroundColor: '#1890ff',
+                     zIndex: 100,
+                     display: 'none',
+                     pointerEvents: 'none',
+                     willChange: 'transform'
+                 }}
+             />
+         </div>
+         {contextHolder}
+      </div>
+    );
+  };
+
+  export default DataGrid;

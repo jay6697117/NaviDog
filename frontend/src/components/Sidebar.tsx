@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Tree, message, Dropdown, MenuProps, Input, Button, Modal, Form, Badge } from 'antd';
-	import {
-	  DatabaseOutlined, 
-	  TableOutlined, 
-	  ConsoleSqlOutlined, 
-  HddOutlined, 
-  FolderOpenOutlined, 
+import {
+  DatabaseOutlined,
+  TableOutlined,
+  ConsoleSqlOutlined,
+  HddOutlined,
+  FolderOpenOutlined,
   FileTextOutlined,
   CopyOutlined,
   ExportOutlined,
@@ -22,11 +22,15 @@ import { Tree, message, Dropdown, MenuProps, Input, Button, Modal, Form, Badge }
   PlusOutlined,
   ReloadOutlined,
   DeleteOutlined,
-  DisconnectOutlined
-	} from '@ant-design/icons';
-	import { useStore } from '../store';
-	import { SavedConnection } from '../types';
-	import { DBGetDatabases, DBGetTables, DBShowCreateTable, ExportTable, OpenSQLFile, CreateDatabase } from '../../wailsjs/go/app/App';
+  DisconnectOutlined,
+  BulbFilled,
+  BulbOutlined,
+  SettingOutlined
+} from '@ant-design/icons';
+import { useStore } from '../store';
+import { SavedConnection } from '../types';
+import { DBGetDatabases, DBGetTables, DBShowCreateTable, ExportTable, OpenSQLFile, CreateDatabase } from '../../wailsjs/go/app/App';
+import { RippleButton, useFlashEffect } from './effects';
 
 const { Search } = Input;
 
@@ -50,7 +54,10 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<any[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: MenuProps['items'] } | null>(null);
-  
+
+  // Flash Effect Hook
+  const { triggerFlash, ref: flashRef } = useFlashEffect();
+
   // Virtual Scroll State
   const [treeHeight, setTreeHeight] = useState(500);
   const treeContainerRef = useRef<HTMLDivElement>(null);
@@ -65,7 +72,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       resizeObserver.observe(treeContainerRef.current);
       return () => resizeObserver.disconnect();
   }, []);
-  
+
   // Connection Status State: key -> 'success' | 'error'
   const [connectionStates, setConnectionStates] = useState<Record<string, 'success' | 'error'>>({});
 
@@ -118,21 +125,21 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
     });
   };
 
-	  const loadDatabases = async (node: any) => {
-	      const conn = node.dataRef as SavedConnection;
-	      const config = { 
-	          ...conn.config, 
+  const loadDatabases = async (node: any) => {
+      const conn = node.dataRef as SavedConnection;
+      const config = {
+          ...conn.config,
           port: Number(conn.config.port),
           password: conn.config.password || "",
           database: conn.config.database || "",
-	          useSSH: conn.config.useSSH || false,
-	          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
-	      };
-	      const res = await DBGetDatabases(config as any);
-	      if (res.success) {
-	        setConnectionStates(prev => ({ ...prev, [conn.id]: 'success' }));
-	        let dbs = (res.data as any[]).map((row: any) => ({
-	          title: row.Database || row.database,
+          useSSH: conn.config.useSSH || false,
+          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
+      };
+      const res = await DBGetDatabases(config as any);
+      if (res.success) {
+        setConnectionStates(prev => ({ ...prev, [conn.id]: 'success' }));
+        let dbs = (res.data as any[]).map((row: any) => ({
+          title: row.Database || row.database,
           key: `${conn.id}-${row.Database || row.database}`,
           icon: <DatabaseOutlined />,
           type: 'database' as const,
@@ -152,13 +159,13 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       }
   };
 
-	  const loadTables = async (node: any) => {
-	      const conn = node.dataRef; // has dbName
-	      const dbName = conn.dbName;
+  const loadTables = async (node: any) => {
+      const conn = node.dataRef; // has dbName
+      const dbName = conn.dbName;
       const key = node.key;
-      
+
       const dbQueries = savedQueries.filter(q => q.connectionId === conn.id && q.dbName === dbName);
-      
+
       const queriesNode: TreeNode = {
           title: '已存查询',
           key: `${key}-queries`,
@@ -175,18 +182,18 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           }))
       };
 
-      const config = { 
-          ...conn.config, 
+      const config = {
+          ...conn.config,
           port: Number(conn.config.port),
           password: conn.config.password || "",
           database: conn.config.database || "",
-	          useSSH: conn.config.useSSH || false,
-	          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
-	      };
-	      const res = await DBGetTables(config as any, conn.dbName);
-	      if (res.success) {
-	        setConnectionStates(prev => ({ ...prev, [key as string]: 'success' }));
-	        const tables = (res.data as any[]).map((row: any) => {
+          useSSH: conn.config.useSSH || false,
+          ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
+      };
+      const res = await DBGetTables(config as any, conn.dbName);
+      if (res.success) {
+        setConnectionStates(prev => ({ ...prev, [key as string]: 'success' }));
+        const tables = (res.data as any[]).map((row: any) => {
             const tableName = Object.values(row)[0] as string;
             return {
               title: tableName,
@@ -194,10 +201,10 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
               icon: <TableOutlined />,
               type: 'table' as const,
               dataRef: { ...conn, tableName },
-              isLeaf: false, 
+              isLeaf: false,
             };
         });
-        
+
         setTreeData(origin => updateTreeData(origin, key, [queriesNode, ...tables]));
       } else {
         setConnectionStates(prev => ({ ...prev, [key as string]: 'error' }));
@@ -215,7 +222,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
     } else if (type === 'table') {
         // Expand table to show object categories
         const { tableName, dbName, id } = dataRef;
-        const conn = dataRef; 
+        const conn = dataRef;
 
         const folders: TreeNode[] = [
             {
@@ -251,7 +258,7 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                 dataRef: conn
             }
         ];
-        
+
         setTreeData(origin => updateTreeData(origin, key, folders));
     }
   };
@@ -293,9 +300,9 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           return;
       }
       if (!info.selected) return;
-      
+
       const { type, dataRef, key, title } = info.node;
-      
+
       // Update active context
       if (type === 'connection') {
           setActiveContext({ connectionId: key, dbName: '' });
@@ -345,37 +352,43 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
 
       const key = node.key;
       const isExpanded = expandedKeys.includes(key);
-      const newExpandedKeys = isExpanded 
-          ? expandedKeys.filter(k => k !== key) 
+      const newExpandedKeys = isExpanded
+          ? expandedKeys.filter(k => k !== key)
           : [...expandedKeys, key];
-      
+
       setExpandedKeys(newExpandedKeys);
       if (!isExpanded) setAutoExpandParent(false);
   };
-  
-	  const handleCopyStructure = async (node: any) => {
-	      const { config, dbName, tableName } = node.dataRef;
-	      const res = await DBShowCreateTable({ 
-	          ...config, 
-	          port: Number(config.port),
-	          password: config.password || "",
-	          database: config.database || "",
+
+  const handleCopyStructure = async (node: any) => {
+      const { config, dbName, tableName } = node.dataRef;
+      const res = await DBShowCreateTable({
+          ...config,
+          port: Number(config.port),
+          password: config.password || "",
+          database: config.database || "",
           useSSH: config.useSSH || false,
           ssh: config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
       } as any, dbName, tableName);
+
       if (res.success) {
           navigator.clipboard.writeText(res.data as string);
           message.success('表结构已复制到剪贴板');
+
+          // Trigger visual flash
+          /* We'll use a specific indicator in the future or global flash if implemented */
+          // triggerFlash('success');
       } else {
           message.error(res.message);
+          // triggerFlash('error');
       }
   };
 
   const handleExport = async (node: any, format: string) => {
       const { config, dbName, tableName } = node.dataRef;
       const hide = message.loading(`正在导出 ${tableName} 为 ${format.toUpperCase()}...`, 0);
-      const res = await ExportTable({ 
-          ...config, 
+      const res = await ExportTable({
+          ...config,
           port: Number(config.port),
           password: config.password || "",
           database: config.database || "",
@@ -385,8 +398,10 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       hide();
       if (res.success) {
           message.success('导出成功');
+          triggerFlash('success');
       } else if (res.message !== 'Cancelled') {
           message.error('导出失败: ' + res.message);
+          triggerFlash('error');
       }
   };
 
@@ -408,12 +423,15 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           hide();
           if (res.success) {
               message.success('导出成功');
+              triggerFlash('success');
           } else if (res.message !== 'Cancelled') {
               message.error('导出失败: ' + res.message);
+              triggerFlash('error');
           }
       } catch (e: any) {
           hide();
           message.error('导出失败: ' + (e?.message || String(e)));
+          triggerFlash('error');
       }
   };
 
@@ -435,12 +453,15 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
           hide();
           if (res.success) {
               message.success('导出成功');
+              triggerFlash('success');
           } else if (res.message !== 'Cancelled') {
               message.error('导出失败: ' + res.message);
+              triggerFlash('error');
           }
       } catch (e: any) {
           hide();
           message.error('导出失败: ' + (e?.message || String(e)));
+          triggerFlash('error');
       }
   };
 
@@ -466,15 +487,15 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
       try {
           const values = await createDbForm.validateFields();
           const conn = targetConnection.dataRef;
-          const config = { 
-              ...conn.config, 
+          const config = {
+              ...conn.config,
               port: Number(conn.config.port),
               password: conn.config.password || "",
               database: "", // No db selected
               useSSH: conn.config.useSSH || false,
               ssh: conn.config.ssh || { host: "", port: 22, user: "", password: "", keyPath: "" }
           };
-          
+
           const res = await CreateDatabase(config as any, values.name);
           if (res.success) {
               message.success("数据库创建成功");
@@ -482,8 +503,10 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
               createDbForm.resetFields();
               // Refresh node
               loadDatabases(targetConnection);
+              triggerFlash('success');
           } else {
               message.error("创建失败: " + res.message);
+              triggerFlash('error');
           }
       } catch (e) {
           // Validate failed
@@ -537,9 +560,9 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                 onClick: () => loadDatabases(node)
             },
             { type: 'divider' },
-            { 
-               key: 'new-query', 
-               label: '新建查询', 
+            {
+               key: 'new-query',
+               label: '新建查询',
                icon: <ConsoleSqlOutlined />,
                onClick: () => {
                    addTab({
@@ -640,9 +663,9 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
                    setTreeData(origin => updateTreeData(origin, node.key, undefined));
                }
            },
-           { 
-               key: 'new-query', 
-               label: '新建查询', 
+           {
+               key: 'new-query',
+               label: '新建查询',
                icon: <ConsoleSqlOutlined />,
                onClick: () => {
                    addTab({
@@ -739,12 +762,21 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
         if (connectionStates[node.key] === 'success') status = 'success';
         else if (connectionStates[node.key] === 'error') status = 'error';
     }
-    
+
     const statusBadge = node.type === 'connection' || node.type === 'database' ? (
         <Badge status={status} style={{ marginRight: 8 }} />
     ) : null;
 
-    return <span title={node.title}>{statusBadge}{node.title}</span>;
+    // Use a simple animation class for entry
+    return (
+        <span
+            className="tree-node-stagger-enter-active"
+            title={node.title}
+            style={{ animation: 'fade-in 0.3s' }}
+        >
+            {statusBadge}{node.title}
+        </span>
+    );
   };
 
   const onRightClick = ({ event, node }: any) => {
@@ -760,6 +792,11 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div ref={flashRef} className="sidebar-header" style={{ position: 'relative' }}>
+             {/* Glow Effect Element is now handled by sidebar-header css class if in effects.css,
+                 but we need to ensure the container relative positioning allows ::before to show */}
+        </div>
+
         <div style={{ padding: '4px 8px' }}>
             <Search placeholder="搜索..." onChange={onSearch} size="small" />
         </div>
@@ -798,14 +835,13 @@ const Sidebar: React.FC<{ onEditConnection?: (conn: SavedConnection) => void }> 
         <Modal
             title="新建数据库"
             open={isCreateDbModalOpen}
-            onOk={handleCreateDatabase}
             onCancel={() => setIsCreateDbModalOpen(false)}
+            onOk={handleCreateDatabase}
         >
             <Form form={createDbForm} layout="vertical">
-                <Form.Item name="name" label="数据库名称" rules={[{ required: true, message: '请输入名称' }]}>
-                    <Input />
+                <Form.Item name="name" label="数据库名称" rules={[{ required: true, message: '请输入数据库名称' }]}>
+                    <Input autoFocus />
                 </Form.Item>
-                {/* Charset option could be added here */}
             </Form>
         </Modal>
     </div>
