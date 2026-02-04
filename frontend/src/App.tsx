@@ -112,7 +112,7 @@ function App() {
   const handleLogResizeStart = (e: React.MouseEvent) => {
       e.preventDefault();
       logResizeRef.current = { startY: e.clientY, startHeight: logPanelHeight };
-      
+
       if (logGhostRef.current) {
           logGhostRef.current.style.top = `${e.clientY}px`;
           logGhostRef.current.style.display = 'block';
@@ -132,11 +132,11 @@ function App() {
 
   const handleLogResizeUp = (e: MouseEvent) => {
       if (logResizeRef.current) {
-          const delta = logResizeRef.current.startY - e.clientY; 
+          const delta = logResizeRef.current.startY - e.clientY;
           const newHeight = Math.max(100, Math.min(800, logResizeRef.current.startHeight + delta));
           setLogPanelHeight(newHeight);
       }
-      
+
       if (logGhostRef.current) {
           logGhostRef.current.style.display = 'none';
       }
@@ -145,7 +145,7 @@ function App() {
       document.removeEventListener('mousemove', handleLogResizeMove);
       document.removeEventListener('mouseup', handleLogResizeUp);
   };
-  
+
   const handleEditConnection = (conn: SavedConnection) => {
       setEditingConnection(conn);
       setIsModalOpen(true);
@@ -155,9 +155,15 @@ function App() {
       setIsModalOpen(false);
       setEditingConnection(null);
   };
-  
+
   // Sidebar Resizing
   const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [isSidebarFullscreen, setIsSidebarFullscreen] = useState(false); // New State
+
+  const toggleSidebarFullscreen = () => {
+      setIsSidebarFullscreen(!isSidebarFullscreen);
+  };
+
   const sidebarDragRef = React.useRef<{ startX: number, startWidth: number } | null>(null);
   const rafRef = React.useRef<number | null>(null);
   const ghostRef = React.useRef<HTMLDivElement>(null);
@@ -165,12 +171,12 @@ function App() {
 
   const handleSidebarMouseDown = (e: React.MouseEvent) => {
       e.preventDefault();
-      
+
       if (ghostRef.current) {
           ghostRef.current.style.left = `${sidebarWidth}px`;
           ghostRef.current.style.display = 'block';
       }
-      
+
       sidebarDragRef.current = { startX: e.clientX, startWidth: sidebarWidth };
       latestMouseX.current = e.clientX; // Init
       document.addEventListener('mousemove', handleSidebarMouseMove);
@@ -179,7 +185,7 @@ function App() {
 
   const handleSidebarMouseMove = (e: MouseEvent) => {
       if (!sidebarDragRef.current) return;
-      
+
       latestMouseX.current = e.clientX; // Always update latest pos
 
       if (rafRef.current) return; // Schedule once per frame
@@ -199,7 +205,7 @@ function App() {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
       }
-      
+
       if (sidebarDragRef.current) {
           // Use latest position for final commit too
           const delta = e.clientX - sidebarDragRef.current.startX;
@@ -210,7 +216,7 @@ function App() {
       if (ghostRef.current) {
           ghostRef.current.style.display = 'none';
       }
-      
+
       sidebarDragRef.current = null;
       document.removeEventListener('mousemove', handleSidebarMouseMove);
       document.removeEventListener('mouseup', handleSidebarMouseUp);
@@ -226,12 +232,14 @@ function App() {
         theme={getAntdTheme(darkMode)}
     >
         <Layout className="app-shell">
-          <Sider 
-            theme={darkMode ? "dark" : "light"} 
-            width={sidebarWidth} 
+          <Sider
+            theme={darkMode ? "dark" : "light"}
+            width={isSidebarFullscreen ? '100%' : sidebarWidth}
             className="app-sider"
-            style={{ 
-                position: 'relative'
+            style={{
+                position: isSidebarFullscreen ? 'fixed' : 'relative',
+                zIndex: isSidebarFullscreen ? 1000 : 1,
+                height: '100%'
             }}
           >
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -246,16 +254,20 @@ function App() {
                     </Dropdown>
                 </div>
                 </div>
-                
+
                 <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <TopologyView onEditConnection={handleEditConnection} />
+                    <TopologyView
+                        onEditConnection={handleEditConnection}
+                        onToggleFullscreen={toggleSidebarFullscreen}
+                        isFullscreen={isSidebarFullscreen}
+                    />
                 </div>
 
                 {/* Sidebar Footer for Log Toggle */}
                 <div style={{ padding: '8px', borderTop: darkMode ? '1px solid #303030' : '1px solid #f0f0f0', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-                    <Button 
-                        type={isLogPanelOpen ? "primary" : "text"} 
-                        icon={<BugOutlined />} 
+                    <Button
+                        type={isLogPanelOpen ? "primary" : "text"}
+                        icon={<BugOutlined />}
                         onClick={() => setIsLogPanelOpen(!isLogPanelOpen)}
                         block
                     >
@@ -263,9 +275,9 @@ function App() {
                     </Button>
                 </div>
             </div>
-            
+
             {/* Sidebar Resize Handle */}
-            <div 
+            <div
                 onMouseDown={handleSidebarMouseDown}
                 style={{
                     position: 'absolute',
@@ -285,25 +297,25 @@ function App() {
                  <TabManager />
              </div>
              {isLogPanelOpen && (
-                 <LogPanel 
-                    height={logPanelHeight} 
-                    onClose={() => setIsLogPanelOpen(false)} 
-                    onResizeStart={handleLogResizeStart} 
+                 <LogPanel
+                    height={logPanelHeight}
+                    onClose={() => setIsLogPanelOpen(false)}
+                    onResizeStart={handleLogResizeStart}
                 />
             )}
           </Content>
-          <ConnectionModal 
-            open={isModalOpen} 
-            onClose={handleCloseModal} 
+          <ConnectionModal
+            open={isModalOpen}
+            onClose={handleCloseModal}
             initialValues={editingConnection}
           />
           <DataSyncModal
             open={isSyncModalOpen}
             onClose={() => setIsSyncModalOpen(false)}
           />
-          
+
           {/* Ghost Resize Line for Sidebar */}
-          <div 
+          <div
               ref={ghostRef}
               style={{
                   position: 'fixed',
@@ -317,9 +329,9 @@ function App() {
                   display: 'none'
               }}
           />
-          
+
           {/* Ghost Resize Line for Log Panel */}
-          <div 
+          <div
               ref={logGhostRef}
               style={{
                   position: 'fixed',
