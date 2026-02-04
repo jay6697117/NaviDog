@@ -19,7 +19,39 @@ const LoadingFallback: React.FC = () => (
 
 export const SpaceScene: React.FC = () => {
     const { connections, activeContext, addTab } = useStore();
-    const { nodes: tableNodes, links: tableLinks, loading: tableLoading } = useTopologyData();
+    const { nodes: tableNodes, links: tableLinks, loading: tableLoading, error } = useTopologyData();
+
+    // ... (rest of code) ...
+
+        {/* Error Overlay */}
+        {isTableMode && error && (
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 10,
+                color: '#ff4d4f',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                flexDirection: 'column',
+                gap: 10
+            }}>
+                <div style={{ fontSize: '24px' }}>⚠️</div>
+                <div>Topology Error</div>
+                <div style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.8 }}>{error}</div>
+            </div>
+        )}
+
+        {/* Loading Overlay for Table Mode */}
+        {isTableMode && tableLoading && (
+            // ... (keep existing loading) ...
+
 
     // Layout Logic for Tables
     // Simple spherical distribution for now to avoid complex d3-force in 3D (though that would be better later)

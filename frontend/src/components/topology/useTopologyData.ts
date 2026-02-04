@@ -51,7 +51,16 @@ export const useTopologyData = () => {
 
                 const tablesRes = await DBGetTables(config as any, dbName);
                 if (!tablesRes.success) throw new Error(tablesRes.message || "Failed to fetch tables");
-                const tables: string[] = tablesRes.data || [];
+
+                // Sidebar parses it as object values. Let's do the same to be safe.
+                // res.data is likely [{ "Tables_in_db": "tablename" }, ...]
+                let tables: string[] = [];
+                if (Array.isArray(tablesRes.data)) {
+                    tables = tablesRes.data.map((row: any) => {
+                        if (typeof row === 'string') return row;
+                        return Object.values(row)[0] as string;
+                    });
+                }
 
                 const rowCounts: Record<string, number> = {};
                 const newLinks: TopologyLink[] = [];
