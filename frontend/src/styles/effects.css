@@ -214,3 +214,69 @@
 .tree-node-stagger-enter-active:nth-child(8) { transition-delay: 210ms; }
 .tree-node-stagger-enter-active:nth-child(9) { transition-delay: 240ms; }
 .tree-node-stagger-enter-active:nth-child(10) { transition-delay: 270ms; }
+
+/* ----------------------------------------
+   Data Operation Transitions
+   ---------------------------------------- */
+
+.cell-just-saved {
+  animation: cell-saved 800ms ease-out;
+}
+
+.row-deleting {
+  animation: row-delete 300ms ease-out forwards;
+  pointer-events: none;
+}
+
+.row-inserted {
+  animation: row-insert 400ms ease-out;
+}
+
+.tab-executing {
+  position: relative;
+}
+
+.tab-executing::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1890ff;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.empty-state-icon {
+  animation: float 3s ease-in-out infinite;
+}
+
+.empty-state-cta {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.tab-content-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.tab-content-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 200ms var(--motion-ease-out);
+}
+
+.tab-content-exit {
+  opacity: 1;
+}
+
+.tab-content-exit-active {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.tab-closing {
+  animation: tab-close 200ms ease-out forwards;
+}
