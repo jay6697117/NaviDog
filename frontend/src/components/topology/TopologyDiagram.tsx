@@ -114,6 +114,7 @@ export const TopologyDiagram: React.FC = () => {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
+                onNodeDoubleClick={(event, node) => onNodeClick(node.data.label as string)}
                 fitView
                 colorMode="dark"
             >
