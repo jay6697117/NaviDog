@@ -42,9 +42,7 @@ export const TopologyView: React.FC<TopologyViewProps> = ({ onEditConnection, on
         {viewMode === 'tree' ? (
           <Sidebar onEditConnection={onEditConnection} />
         ) : (
-          <Suspense fallback={<div className="topology-loading"><Spin tip="加载 3D 场景..." /></div>}>
-import { TopologyDiagram } from './TopologyDiagram';
-// ...
+          <Suspense fallback={<div className="topology-loading"><Spin tip="加载拓扑视图..." /></div>}>
             <TopologyDiagram />
           </Suspense>
         )}
