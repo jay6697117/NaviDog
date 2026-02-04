@@ -1,2 +1,2 @@
 // Effects components barrel export
-export {};
+export { Ripple } from './Ripple';
