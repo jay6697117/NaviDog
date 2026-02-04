@@ -23,30 +23,7 @@ export const SpaceScene: React.FC = () => {
 
     // ... (rest of code) ...
 
-        {/* Error Overlay */}
-        {isTableMode && error && (
-            <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                background: 'rgba(0,0,0,0.5)',
-                zIndex: 10,
-                color: '#ff4d4f',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                flexDirection: 'column',
-                gap: 10
-            }}>
-                <div style={{ fontSize: '24px' }}>⚠️</div>
-                <div>Topology Error</div>
-                <div style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.8 }}>{error}</div>
-            </div>
-        )}
+
 
         {/* Loading Overlay for Table Mode */}
         {isTableMode && tableLoading && (
@@ -173,6 +150,56 @@ export const SpaceScene: React.FC = () => {
 
             </Suspense>
         </Canvas>
+
+        {/* Error Overlay */}
+        {isTableMode && error && (
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 10,
+                color: '#ff4d4f',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                flexDirection: 'column',
+                gap: 10
+            }}>
+                <div style={{ fontSize: '24px' }}>⚠️</div>
+                <div>Topology Error</div>
+                <div style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.8 }}>{error}</div>
+            </div>
+        )}
+
+        {/* Error Overlay */}
+        {isTableMode && error && (
+            <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                background: 'rgba(0,0,0,0.5)',
+                zIndex: 10,
+                color: '#ff4d4f',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                flexDirection: 'column',
+                gap: 10
+            }}>
+                <div style={{ fontSize: '24px' }}>⚠️</div>
+                <div>Topology Error</div>
+                <div style={{ fontSize: '12px', fontWeight: 'normal', opacity: 0.8 }}>{error}</div>
+            </div>
+        )}
 
         {/* Loading Overlay for Table Mode */}
         {isTableMode && tableLoading && (
